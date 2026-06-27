@@ -1,0 +1,129 @@
+# ============================================================================
+# >>> STRIP-DOWN (pristine do user) + _AEI do GIO0 desativado no DSDT <<<
+# Backend Qualcomm TODO comentado [1]..[11]. ATIVOS: base Smem/HWIO/Clock/Pmic/
+# SPMI/UFS. Teste atual = isolar o _AEI (GIO0 self-GPE -> 0x239) com tudo o resto
+# como estava no strip-down que voce ja conhece. Se ainda travar, ativar 1 por 1.
+# ============================================================================
+
+# --- SmemDxe (ATIVO) ---
+  FILE DRIVER = f541d663-4a48-40aa-aabf-ff158ccae34c {
+    SECTION DXE_DEPEX = Dxe/EFI_Binaries/Drivers/sm7150/SmemDxe/SmemDxe.depex
+    SECTION PE32 = Dxe/EFI_Binaries/Drivers/sm7150/SmemDxe/SmemDxe.efi
+    SECTION UI = "SmemDxe"
+  }
+
+# --- HWIODxeDriver (ATIVO) ---
+  FILE DRIVER = af9763a2-033b-4109-8e17-56a98d380c92 {
+    SECTION DXE_DEPEX = Dxe/EFI_Binaries/Drivers/sm7150/HWIODxeDriver/HWIODxeDriver.depex
+    SECTION PE32 = Dxe/EFI_Binaries/Drivers/sm7150/HWIODxeDriver/HWIODxeDriver.efi
+    SECTION UI = "HWIODxeDriver"
+  }
+
+# --- [1] DALSys  [COMENTADO - isolando o reboot: base+fix<4GB boota?] ---
+#  FILE DRIVER = 8E9BD160-B184-11DF-94E2-0800200C9A66 {
+#    SECTION DXE_DEPEX = Dxe/EFI_Binaries/Drivers/sm7150/DALSys/DALSys.depex
+#    SECTION PE32 = Dxe/EFI_Binaries/Drivers/sm7150/DALSys/DALSys.efi
+#    SECTION UI = "DALSys"
+#  }
+
+# --- ClockDxe (ATIVO, base) ---
+  FILE DRIVER = 4DB5DEA6-5302-4D1A-8A82-677A683B0D29 {
+    SECTION DXE_DEPEX = Dxe/EFI_Binaries/Drivers/sm7150/ClockDxe/ClockDxe.depex
+    SECTION PE32 = Dxe/EFI_Binaries/Drivers/sm7150/ClockDxe/ClockDxe.efi
+    SECTION UI = "ClockDxe"
+  }
+
+# --- PmicDxe (ATIVO, base) ---
+  FILE DRIVER = 5776232e-082d-4b75-9a0e-fe1d13f7a5d9 {
+    SECTION DXE_DEPEX = Dxe/EFI_Binaries/Drivers/sm7150/PmicDxe/PmicDxe.depex
+    SECTION PE32 = Dxe/EFI_Binaries/Drivers/sm7150/PmicDxe/PmicDxe.efi
+    SECTION UI = "PmicDxe"
+  }
+
+# --- SPMI (ATIVO, base) ---
+  FILE DRIVER = 2a7b4bef-80cd-49e1-b473-374ba4d673fc {
+    SECTION DXE_DEPEX = Dxe/EFI_Binaries/Drivers/sm7150/SPMI/SPMI.depex
+    SECTION PE32 = Dxe/EFI_Binaries/Drivers/sm7150/SPMI/SPMI.efi
+    SECTION UI = "SPMI"
+  }
+
+# --- UFSDxe (ATIVO, base) ---
+  FILE DRIVER = 0d35cd8e-97ea-4f9a-96af-0f0d89f76567 {
+    SECTION DXE_DEPEX = Dxe/EFI_Binaries/Drivers/sm7150/UFSDxe/UFSDxe.depex
+    SECTION PE32 = Dxe/EFI_Binaries/Drivers/sm7150/UFSDxe/UFSDxe.efi
+    SECTION UI = "UFSDxe"
+  }
+
+# ===== BACKEND COMENTADO - descomentar UM por vez =====
+
+# --- [2] ChipInfo ---
+#  FILE DRIVER = 10e193df-9966-44e7-b17c-59dd831e20fc {
+#    SECTION DXE_DEPEX = Dxe/EFI_Binaries/Drivers/sm7150/ChipInfo/ChipInfo.depex
+#    SECTION PE32 = Dxe/EFI_Binaries/Drivers/sm7150/ChipInfo/ChipInfo.efi
+#    SECTION UI = "ChipInfo"
+#  }
+
+# --- [3] PlatformInfoDxeDriver ---
+#  FILE DRIVER = B105211B-BBBD-4ADD-A3B0-D1CF4A52154C {
+#    SECTION DXE_DEPEX = Dxe/EFI_Binaries/Drivers/sm7150/PlatformInfoDxeDriver/PlatformInfoDxeDriver.depex
+#    SECTION PE32 = Dxe/EFI_Binaries/Drivers/sm7150/PlatformInfoDxeDriver/PlatformInfoDxeDriver.efi
+#    SECTION UI = "PlatformInfoDxeDriver"
+#  }
+
+# --- [4] ULogDxe ---
+#  FILE DRIVER = E43128A8-8692-42B6-8AFA-676158578D18 {
+#    SECTION DXE_DEPEX = Dxe/EFI_Binaries/Drivers/sm7150/ULogDxe/ULogDxe.depex
+#    SECTION PE32 = Dxe/EFI_Binaries/Drivers/sm7150/ULogDxe/ULogDxe.efi
+#    SECTION UI = "ULogDxe"
+#  }
+
+# --- [5] CmdDbDxe ---
+#  FILE DRIVER = ABA01FF8-2CCB-4E12-8B2E-CD3F4A742993 {
+#    SECTION DXE_DEPEX = Dxe/EFI_Binaries/Drivers/sm7150/CmdDbDxe/CmdDbDxe.depex
+#    SECTION PE32 = Dxe/EFI_Binaries/Drivers/sm7150/CmdDbDxe/CmdDbDxe.efi
+#    SECTION UI = "CmdDbDxe"
+#  }
+
+# --- [6] NpaDxe ---
+#  FILE DRIVER = CB29F4D1-7F37-4692-A416-93E82E219711 {
+#    SECTION DXE_DEPEX = Dxe/EFI_Binaries/Drivers/sm7150/NpaDxe/NpaDxe.depex
+#    SECTION PE32 = Dxe/EFI_Binaries/Drivers/sm7150/NpaDxe/NpaDxe.efi
+#    SECTION UI = "NpaDxe"
+#  }
+
+# --- [7] RpmhDxe ---
+#  FILE DRIVER = CB29F4D1-7F37-4692-A416-93E82E219766 {
+#    SECTION DXE_DEPEX = Dxe/EFI_Binaries/Drivers/sm7150/RpmhDxe/RpmhDxe.depex
+#    SECTION PE32 = Dxe/EFI_Binaries/Drivers/sm7150/RpmhDxe/RpmhDxe.efi
+#    SECTION UI = "RpmhDxe"
+#  }
+
+# --- [8] PdcDxe ---
+#  FILE DRIVER = B43C22DB-6333-490C-872D-0A73439059FD {
+#    SECTION DXE_DEPEX = Dxe/EFI_Binaries/Drivers/sm7150/PdcDxe/PdcDxe.depex
+#    SECTION PE32 = Dxe/EFI_Binaries/Drivers/sm7150/PdcDxe/PdcDxe.efi
+#    SECTION UI = "PdcDxe"
+#  }
+
+# --- [9] ShmBridgeDxe ---
+#  FILE DRIVER = 9c1eb71f-dd6c-4ed5-9f6a-5cc0ca789f16 {
+#    SECTION DXE_DEPEX = Dxe/EFI_Binaries/Drivers/sm7150/ShmBridgeDxe/ShmBridgeDxe.depex
+#    SECTION PE32 = Dxe/EFI_Binaries/Drivers/sm7150/ShmBridgeDxe/ShmBridgeDxe.efi
+#    SECTION UI = "ShmBridgeDxe"
+#  }
+
+# --- [10] ScmDxe ---
+#  FILE DRIVER = 2d7a83e3-e343-4ffb-9109-631f2ee11694 {
+#    SECTION DXE_DEPEX = Dxe/EFI_Binaries/Drivers/sm7150/ScmDxe/ScmDxe.depex
+#    SECTION PE32 = Dxe/EFI_Binaries/Drivers/sm7150/ScmDxe/ScmDxe.efi
+#    SECTION UI = "ScmDxe"
+#  }
+
+# --- [11] TzDxe ---
+#  FILE DRIVER = 6925fad3-e243-4b69-ad61-3f978c8abc60 {
+#    SECTION DXE_DEPEX = Dxe/EFI_Binaries/Drivers/sm7150/TzDxe/TzDxe.depex
+#    SECTION PE32 = Dxe/EFI_Binaries/Drivers/sm7150/TzDxe/TzDxe.efi
+#    SECTION UI = "TzDxe"
+#  }
+
+# NOTA: ButtonsDxe do sweet ja vem pelo sweet.inc; nao duplicar aqui.

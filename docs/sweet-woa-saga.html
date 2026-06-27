@@ -1,0 +1,372 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Sweet WoA · Anatomia da Saga do Touch · Arquitetura, Barreiras e o Plano</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,300;9..144,400;9..144,500;9..144,600&family=JetBrains+Mono:wght@400;500;600&family=Manrope:wght@200;300;400;500;600;700&display=swap" rel="stylesheet">
+<style>
+:root {
+  --paper: #f4f0e8; --paper-2: #ebe5d8; --ink: #1a1814; --ink-2: #3a362e; --ink-3: #6a6458;
+  --rule: #c9c1ae; --brick: #a8402a; --brick-soft: #c26a52; --moss: #4a6340; --moss-soft: #718a5f;
+  --cream: #f9f5ea; --ochre: #b8873a;
+  --serif: 'Fraunces', Georgia, serif; --sans: 'Manrope', sans-serif; --mono: 'JetBrains Mono', monospace;
+}
+* { margin: 0; padding: 0; box-sizing: border-box; }
+html { scroll-behavior: smooth; }
+body { background: var(--paper); color: var(--ink); font-family: var(--sans); font-weight: 300; line-height: 1.6; -webkit-font-smoothing: antialiased; }
+body::before { content: ""; position: fixed; inset: 0; pointer-events: none; opacity: 0.4; z-index: 0;
+  background-image: radial-gradient(circle at 20% 30%, rgba(168,64,42,0.03) 0%, transparent 40%), radial-gradient(circle at 80% 70%, rgba(74,99,64,0.03) 0%, transparent 40%); }
+.shell { position: relative; z-index: 2; max-width: 1100px; margin: 0 auto; padding: 0 48px; }
+header { padding: 96px 0 56px; border-bottom: 1px solid var(--rule); }
+.eyebrow { font-family: var(--mono); font-size: 11px; text-transform: uppercase; letter-spacing: 0.25em; color: var(--brick); font-weight: 500; margin-bottom: 24px; }
+h1 { font-family: var(--serif); font-weight: 400; font-size: clamp(42px,6vw,72px); line-height: 1.04; letter-spacing: -0.02em; margin-bottom: 24px; font-variation-settings: "opsz" 144; }
+h1 em { font-style: italic; color: var(--brick); font-weight: 300; }
+.subtitle { font-size: 19px; line-height: 1.55; color: var(--ink-2); max-width: 780px; font-weight: 300; }
+.meta-line { font-family: var(--mono); font-size: 11px; color: var(--ink-3); margin-top: 28px; letter-spacing: 0.04em; display: flex; gap: 18px; flex-wrap: wrap; }
+.meta-line span b { color: var(--ink-2); font-weight: 600; }
+.toc-wrap { position: sticky; top: 0; z-index: 50; background: rgba(244,240,232,0.94); backdrop-filter: blur(6px); border-bottom: 1px solid var(--rule); padding: 13px 0; }
+.toc { display: flex; gap: 26px; flex-wrap: wrap; max-width: 1100px; margin: 0 auto; padding: 0 48px; }
+.toc a { font-family: var(--mono); font-size: 11px; text-transform: uppercase; letter-spacing: 0.1em; color: var(--ink-3); text-decoration: none; font-weight: 500; transition: color 0.15s; }
+.toc a:hover { color: var(--brick); }
+.toc a b { color: var(--brick); }
+section { padding: 64px 0; border-bottom: 1px solid var(--rule); }
+.section-num { font-family: var(--mono); font-size: 11px; color: var(--brick); letter-spacing: 0.22em; text-transform: uppercase; margin-bottom: 14px; font-weight: 500; }
+h2 { font-family: var(--serif); font-weight: 400; font-size: clamp(30px,4vw,46px); line-height: 1.1; letter-spacing: -0.015em; margin-bottom: 22px; font-variation-settings: "opsz" 80; }
+h2 em { font-style: italic; color: var(--brick); }
+h3 { font-family: var(--serif); font-weight: 500; font-size: 23px; line-height: 1.25; margin: 38px 0 14px; letter-spacing: -0.01em; }
+h4 { font-family: var(--mono); font-size: 12px; text-transform: uppercase; letter-spacing: 0.12em; color: var(--ink-3); font-weight: 600; margin: 28px 0 12px; }
+p { font-size: 15.5px; line-height: 1.68; color: var(--ink-2); margin-bottom: 16px; max-width: 820px; }
+p.lead { font-size: 18px; color: var(--ink); font-weight: 300; max-width: 820px; }
+strong { color: var(--ink); font-weight: 600; }
+code.inline { font-family: var(--mono); font-size: 12.5px; background: var(--paper-2); padding: 1px 6px; border-radius: 4px; color: var(--brick); font-weight: 500; }
+ul.clean, ol.clean { max-width: 820px; margin: 12px 0 20px; padding-left: 22px; }
+ul.clean li, ol.clean li { font-size: 15px; color: var(--ink-2); line-height: 1.6; margin-bottom: 9px; }
+ul.clean li::marker { color: var(--brick); }
+.card-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px,1fr)); gap: 1px; background: var(--rule); border: 1px solid var(--rule); margin: 28px 0 12px; }
+.card-cell { background: var(--cream); padding: 18px 20px; display: flex; flex-direction: column; gap: 7px; }
+.card-label { font-family: var(--mono); font-size: 10px; text-transform: uppercase; letter-spacing: 0.12em; color: var(--ink-3); font-weight: 600; }
+.card-value { font-size: 14px; color: var(--ink); line-height: 1.45; font-weight: 500; }
+.card-value small { display: block; color: var(--ink-3); font-weight: 400; font-size: 12px; margin-top: 3px; }
+.callout { margin: 24px 0; padding: 18px 22px; background: var(--cream); border-left: 3px solid var(--ochre); font-size: 14.5px; color: var(--ink-2); line-height: 1.6; max-width: 860px; }
+.callout.alert { border-left-color: var(--brick); }
+.callout.success { border-left-color: var(--moss); }
+.callout strong { color: var(--ink); font-weight: 600; }
+.callout-title { font-family: var(--mono); font-size: 11px; text-transform: uppercase; letter-spacing: 0.1em; font-weight: 600; color: var(--ink); margin-bottom: 8px; display: block; }
+.callout.alert .callout-title { color: var(--brick); }
+.callout.success .callout-title { color: var(--moss); }
+.callout p { max-width: none; margin-bottom: 10px; font-size: 14.5px; }
+.callout p:last-child { margin-bottom: 0; }
+.pill { display: inline-block; padding: 2px 9px; border-radius: 999px; font-family: var(--mono); font-size: 10px; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; vertical-align: middle; }
+.pill.crit { background: rgba(168,64,42,0.15); color: var(--brick); }
+.pill.warn { background: rgba(184,135,58,0.18); color: var(--ochre); }
+.pill.info { background: rgba(74,99,64,0.15); color: var(--moss); }
+.pill.ok { background: rgba(74,99,64,0.22); color: var(--moss); }
+.finding { border: 1px solid var(--rule); border-radius: 8px; background: var(--cream); margin: 18px 0; overflow: hidden; max-width: 920px; }
+.finding-head { display: flex; align-items: center; gap: 12px; padding: 14px 20px; background: var(--paper-2); border-bottom: 1px solid var(--rule); }
+.finding-id { font-family: var(--mono); font-size: 12px; font-weight: 600; color: var(--ink-3); }
+.finding-title { font-family: var(--serif); font-size: 18px; font-weight: 500; color: var(--ink); flex: 1; }
+.finding-body { padding: 16px 20px; }
+.finding-row { display: grid; grid-template-columns: 92px 1fr; gap: 4px 14px; margin-bottom: 10px; }
+.finding-row .k { font-family: var(--mono); font-size: 10px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--ink-3); font-weight: 600; padding-top: 2px; }
+.finding-row .v { font-size: 14px; color: var(--ink-2); line-height: 1.55; }
+.finding-row .v.evidence { font-family: var(--mono); font-size: 12px; color: var(--ink-3); }
+pre { background: #1a1814; border: 1px solid #2f2a22; border-radius: 8px; padding: 18px 20px; overflow-x: auto; margin: 18px 0; max-width: 920px; line-height: 1.55; }
+pre code { font-family: var(--mono); font-size: 12.5px; color: #d8d0bf; font-weight: 400; }
+pre .c { color: #7a7363; font-style: italic; }
+pre .k { color: #c26a52; }
+pre .s { color: #9bab7f; }
+pre .hl { color: #f0d9a8; font-weight: 600; }
+.code-label { font-family: var(--mono); font-size: 10px; text-transform: uppercase; letter-spacing: 0.1em; color: var(--ink-3); font-weight: 600; margin: 22px 0 -8px; }
+.comp-table { margin: 18px 0 28px; border: 1px solid var(--rule); border-radius: 7px; overflow: hidden; background: var(--cream); max-width: 920px; }
+.comp-row { display: grid; border-bottom: 1px solid var(--rule); }
+.comp-row.c3 { grid-template-columns: 180px 1fr 1fr; }
+.comp-row.c2 { grid-template-columns: 230px 1fr; }
+.comp-row:last-child { border-bottom: none; }
+.comp-row.header { background: var(--paper-2); }
+.comp-row.header > div { font-family: var(--mono); font-size: 10px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--ink-2); font-weight: 600; padding: 11px 14px; }
+.comp-row > div { padding: 13px 14px; border-right: 1px solid var(--rule); font-size: 13px; line-height: 1.5; color: var(--ink-2); }
+.comp-row > div:last-child { border-right: none; }
+.comp-row > div code { font-family: var(--mono); font-size: 11.5px; color: var(--brick); }
+.comp-row .field { font-family: var(--mono); font-size: 12px; color: var(--ink); font-weight: 600; }
+.flow { display: flex; flex-direction: column; gap: 0; margin: 24px 0; max-width: 760px; background: var(--cream); border: 1px solid var(--rule); border-radius: 8px; padding: 8px 0; }
+.flow-step { display: grid; grid-template-columns: 160px 1fr; gap: 16px; padding: 11px 22px; align-items: baseline; }
+.flow-step .layer { font-family: var(--mono); font-size: 11px; font-weight: 600; color: var(--brick); letter-spacing: 0.04em; }
+.flow-step .desc { font-size: 13.5px; color: var(--ink-2); }
+.flow-step .desc code { font-family: var(--mono); font-size: 11.5px; color: var(--ink); }
+.flow-arrow { text-align: left; padding: 0 22px; color: var(--rule); font-size: 13px; line-height: 0.6; }
+.divider-note { font-family: var(--mono); font-size: 11px; color: var(--ink-3); letter-spacing: 0.08em; margin: 34px 0 6px; text-transform: uppercase; }
+footer { padding: 70px 0 100px; }
+footer p { font-family: var(--mono); font-size: 11px; color: var(--ink-3); letter-spacing: 0.04em; }
+@media (max-width: 720px) { .shell, .toc { padding: 0 22px; } .finding-row, .flow-step { grid-template-columns: 1fr; } .comp-row.c3 { grid-template-columns: 1fr 1fr; } }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="shell">
+    <div class="eyebrow">Sweet · Windows on ARM · Manual da Saga</div>
+    <h1>A anatomia da saga do <em>touch</em>.</h1>
+    <p class="subtitle">Um mapa do port de Windows 11 ARM64 no Redmi Note 10 Pro (sweet / sm7150): o que já funciona, onde cada periférico esbarra, a parede comum por trás de tudo — e o plano para acender o touch. Documento vivo; atualizar conforme avança.</p>
+    <div class="meta-line">
+      <span><b>Device:</b> Xiaomi Redmi Note 10 Pro "sweet"</span>
+      <span><b>SoC:</b> sm7150 / Snapdragon 732G</span>
+      <span><b>UEFI:</b> edk2-sweet (dopaemon)</span>
+      <span><b>Base:</b> investigação jun/2026</span>
+    </div>
+  </div>
+</header>
+
+<div class="shell" style="padding-top:44px;">
+  <div class="callout alert" style="border-left-width:5px; background:var(--paper-2);">
+    <span class="callout-title">🔥 Descoberta crítica — NÃO ESQUECER <span class="pill crit" style="margin-left:6px;">caminho do dual boot</span></span>
+    <p>O celular <strong>TEM uma partição dedicada de variáveis UEFI</strong>, achada via <code class="inline">ls /dev/block/by-name/</code>:</p>
+    <pre style="margin:10px 0 14px;"><code>uefivarstore -&gt; /dev/block/sde18</code></pre>
+    <p>O UEFI do <strong>Aloha</strong> hoje usa <strong>variáveis RAM-only</strong> (<code class="inline">PcdEmuVariableNvModeEnable=TRUE</code>) e <strong>IGNORA essa partição</strong>. Por isso o <code class="inline">BootOrder</code> do Windows é apagado a cada reboot — e foi preciso o hack <code class="inline">\EFI\Boot\bootaa64.efi</code> pra conseguir bootar.</p>
+    <p><strong>Fix definitivo:</strong> apontar o variable store do Aloha pra <code class="inline">uefivarstore</code> (<code class="inline">sde18</code>) como NV storage de verdade. Resultado:</p>
+    <ul class="clean" style="margin:10px 0 12px;">
+      <li>Variáveis <strong>persistem</strong> → <code class="inline">BootOrder</code> sobrevive → dispensa o <code class="inline">bootaa64.efi</code></li>
+      <li><strong>Dual boot de verdade</strong> — várias entradas de boot que não somem no reset</li>
+      <li>Mata a raiz de vários asserts do Project Mu (variable policy, <code class="inline">MemoryTypeInfo</code>) que dependiam de variável real</li>
+    </ul>
+    <p style="margin-bottom:0;"><strong>⚠️ PRÓXIMO ALVO</strong> assim que o Windows bootar pela primeira vez. Alvo: <code class="inline">/dev/block/sde18</code> (<code class="inline">uefivarstore</code>) → backend de variáveis do Aloha.</p>
+  </div>
+</div>
+
+<div class="toc-wrap">
+  <nav class="toc">
+    <a href="#panorama"><b>01</b> Panorama</a>
+    <a href="#arquitetura"><b>02</b> Arquitetura</a>
+    <a href="#barreiras"><b>03</b> Barreiras</a>
+    <a href="#solucoes"><b>04</b> Soluções tentadas</a>
+    <a href="#comandos"><b>05</b> Comandos</a>
+    <a href="#plano"><b>06</b> Plano</a>
+  </nav>
+</div>
+
+<!-- 01 PANORAMA -->
+<section id="panorama">
+  <div class="shell">
+    <div class="section-num">01 — Panorama</div>
+    <h2>Onde estamos: <em>boota</em>, mas sem input.</h2>
+    <p class="lead">O Windows 11 ARM64 <strong>sobe estável até o OOBE</strong> no sweet — sem loop de crash, sem watchdog. A maioria dos ports nem chega aqui. O que falta é a <strong>última milha</strong>: nenhum input funciona (touch, USB/OTG, WiFi, botões), e todos esbarram na mesma parede — a camada de energia/periférico (PMIC).</p>
+
+    <div class="card-grid">
+      <div class="card-cell"><span class="card-label">Boot <span class="pill ok">OK</span></span><span class="card-value">Estável até o OOBE<small>Com o touch desativado (TSC1 _STA=0). Sem 0x101.</small></span></div>
+      <div class="card-cell"><span class="card-label">Touch <span class="pill crit">bloqueado</span></span><span class="card-value">Goodix gt9896 mudo<small>Sem AVDD (PMIC LDO11). 0x101 quando ativado.</small></span></div>
+      <div class="card-cell"><span class="card-label">USB/OTG <span class="pill crit">bloqueado</span></span><span class="card-value">dwc3 host morto<small>Testado powered + hardware bom. Falta o Type-C controller (PMIC).</small></span></div>
+      <div class="card-cell"><span class="card-label">WiFi <span class="pill crit">bloqueado</span></span><span class="card-value">Sem driver Qualcomm<small>WCN3990 não deployado (qcwlan ausente).</small></span></div>
+    </div>
+
+    <div class="callout success">
+      <span class="callout-title">A virada — o que descobrimos</span>
+      <p>O deploy atual é o <strong>mínimo</strong> (<code class="inline">inject_min.bat</code> = só <code class="inline">qcgpio</code> + <code class="inline">qci2c</code> + touch). O set completo (<code class="inline">moorea</code>, 82 INFs) tem <strong>PMIC, SPMI, Type-C, WLAN, botões</strong> — tudo que falta. A "parede do PMIC" é, na raiz, o <strong>driver do PMIC não estar deployado</strong>. O bloqueio exato para deployá-lo: o driver <code class="inline">qcspmi</code> pendura o boot.</p>
+    </div>
+  </div>
+</section>
+
+<!-- 02 ARQUITETURA -->
+<section id="arquitetura">
+  <div class="shell">
+    <div class="section-num">02 — Arquitetura</div>
+    <h2>A cadeia: do <em>silício</em> ao toque.</h2>
+    <p>Para um dedo virar evento no Windows, a corrente atravessa estas camadas. O elo que falta é a energia (AVDD), e ela depende do PMIC — gerido por drivers que ainda não subiram.</p>
+
+    <div class="flow">
+      <div class="flow-step"><span class="layer">UEFI (edk2-sweet)</span><span class="desc">Sobe o SoC, publica as tabelas ACPI (DSDT). Versão "stripped" — sem o backend Qualcomm (que crashava).</span></div>
+      <div class="flow-arrow">↓</div>
+      <div class="flow-step"><span class="layer">DSDT</span><span class="desc">Descreve os devices: <code>TSC1</code> (touch), <code>IC10</code> (I2C), <code>PEP0</code> (qcpep/power), PMIC, SPMI, USB0…</span></div>
+      <div class="flow-arrow">↓</div>
+      <div class="flow-step"><span class="layer">Drivers Windows</span><span class="desc"><code>qcgpio</code>, <code>qci2c</code>, <code>qcpep</code> (deployados) · <code>qcpmic</code>, <code>qcspmi</code>, <code>qcwlan</code> (FALTAM)</span></div>
+      <div class="flow-arrow">↓</div>
+      <div class="flow-step"><span class="layer">PMIC / RPMh</span><span class="desc">Liga os reguladores. A <code>LDO11_C</code> (3.3V) = a AVDD do touch. Dona = EE4 (RPMh/AOP).</span></div>
+      <div class="flow-arrow">↓</div>
+      <div class="flow-step"><span class="layer">Touch IC</span><span class="desc">Goodix gt9896 @ I2C <code>0x5D</code>. Com AVDD → responde. Sem → mudo → IRQ storm → 0x101.</span></div>
+    </div>
+
+    <h3>Mapa de hardware do touch</h3>
+    <div class="comp-table">
+      <div class="comp-row c2 header"><div>Sinal</div><div>Detalhe</div></div>
+      <div class="comp-row c2"><div class="field">IC</div><div>Goodix gt9896 / <code>GDGT9889</code> @ I2C <code>0x5D</code> · bus i2c7 = GENI SE1 @ <code>0xA84000</code> (IC10)</div></div>
+      <div class="comp-row c2"><div class="field">SDA / SCL</div><div>GPIO6 / GPIO7 · função "qup11" (FUNC_SEL 1)</div></div>
+      <div class="comp-row c2"><div class="field">INT</div><div>GPIO9 · level-low (mudado p/ Edge+PullUp p/ mitigar storm)</div></div>
+      <div class="comp-row c2"><div class="field">RESET</div><div>GPIO8 · active-low</div></div>
+      <div class="comp-row c2"><div class="field">AVDD</div><div><strong>PMIC LDO11_C (vreg_l11c), 3.3V</strong> — o que falta. Recurso ACPI: <code>PPP_RESOURCE_ID_LDO11_C</code></div></div>
+      <div class="comp-row c2"><div class="field">VDDIO</div><div>GPIO90 (já ligado)</div></div>
+    </div>
+
+    <h3>Os dois conjuntos de drivers</h3>
+    <p>Tudo gira em torno de quais drivers são injetados na <code class="inline">win21h2.wim</code> (via <code class="inline">inject*.bat</code> em <code class="inline">E:\sweet_drivers</code>).</p>
+    <div class="comp-table">
+      <div class="comp-row c3 header"><div>Set</div><div>Conteúdo</div><div>Estado</div></div>
+      <div class="comp-row c3"><div class="field">moorea_min</div><div>SÓ <code>qcgpio</code> + <code>qci2c</code> + touch</div><div>Deployado hoje. Boota, mas sem PMIC.</div></div>
+      <div class="comp-row c3"><div class="field">moorea (full)</div><div>+ <code>qcpmic</code>, <code>qcspmi</code>, <code>qcpmicgpio</code> (botões), <code>qcpmictcc</code> (Type-C), <code>qcwlan</code> (WiFi), BT, USB, sensors… (82 INFs)</div><div>Tem tudo. Mas <code>qcspmi</code> pendura o boot.</div></div>
+    </div>
+    <div class="callout">
+      <span class="callout-title">Migração de IDs no DSDT (04xx → 14xx)</span>
+      <p>Para os drivers do <code class="inline">moorea</code> <em>bindar</em>, o DSDT precisa migrar os <code class="inline">_HID</code> ACPI: GIO0 <code class="inline">140D</code> ✓ · SPMI <code class="inline">140C</code> · PMIC <code class="inline">142E</code> · botões <code class="inline">1430</code> · IC10 <code class="inline">1411</code> ✓. Hoje PMIC/SPMI/botões estão <strong>revertidos para 04xx</strong> (não bindam) justamente porque o <code class="inline">qcspmi</code> pendurava o boot.</p>
+    </div>
+  </div>
+</section>
+
+<!-- 03 BARREIRAS -->
+<section id="barreiras">
+  <div class="shell">
+    <div class="section-num">03 — Barreiras</div>
+    <h2>As paredes — e a parede <em>comum</em>.</h2>
+    <p>Cada periférico morto é um sintoma. A doença é uma só: a camada de energia (PMIC) não está de pé no Windows.</p>
+
+    <div class="finding">
+      <div class="finding-head"><span class="finding-id">B-01</span><span class="finding-title">qcspmi pendura o boot (a raiz)</span><span class="pill crit">crítico</span></div>
+      <div class="finding-body">
+        <div class="finding-row"><span class="k">Sintoma</span><span class="v">Migrar o DSDT p/ 14xx (drivers PMIC/SPMI bindam) → o <code class="inline">qcspmi</code> (SPMI, boot-start) pendura o boot; o PMIC não enumera. Por isso foi revertido p/ 04xx.</span></div>
+        <div class="finding-row"><span class="k">Evidência</span><span class="v evidence">DSDT.dsl: QCOM042E (PMIC, l.122), QCOM040C (SPMI, l.94262), QCOM0430 (botões, l.172) — todos com comentário "REVERTIDO… qcspmi pendurava o boot".</span></div>
+        <div class="finding-row"><span class="k">Causa provável</span><span class="v">O hardware SPMI/PMIC não está inicializado (o backend que o UEFI stripped removeu) → o <code class="inline">qcspmi</code> pendura tentando acessá-lo.</span></div>
+        <div class="finding-row"><span class="k">Destrava</span><span class="v">Ver ao vivo (serial/KDCOM) onde o <code class="inline">qcspmi</code> pendura → fazer só aquela init de SPMI no UEFI (sem o backend inteiro que crasha).</span></div>
+      </div>
+    </div>
+
+    <div class="finding">
+      <div class="finding-head"><span class="finding-id">B-02</span><span class="finding-title">Touch sem AVDD → 0x101</span><span class="pill crit">crítico</span></div>
+      <div class="finding-body">
+        <div class="finding-row"><span class="k">Sintoma</span><span class="v">Touch ativado → <code class="inline">CLOCK_WATCHDOG_TIMEOUT (0x101)</code>. IC mudo no I2C; a IRQ de nível não é limpa → storm.</span></div>
+        <div class="finding-row"><span class="k">Provado</span><span class="v">No UEFI: controlador I2C 100% pronto (FW=0x303, clocks on), bus elétrico perfeito após VDDIO+mux+pull-up, scan 0x08–0x77 = 0 devices → IC mudo → falta AVDD (LDO11_C).</span></div>
+        <div class="finding-row"><span class="k">Por quê</span><span class="v">Sem driver de PMIC (B-01), o <code class="inline">qcpep</code> vota a AVDD mas não há quem ligue a LDO11. Subproduto de B-01.</span></div>
+      </div>
+    </div>
+
+    <div class="finding">
+      <div class="finding-head"><span class="finding-id">B-03</span><span class="finding-title">USB/OTG host morto</span><span class="pill warn">confirmado</span></div>
+      <div class="finding-body">
+        <div class="finding-row"><span class="k">Sintoma</span><span class="v">Mouse via OTG não responde — testado adaptador normal E powered, hardware comprovadamente bom.</span></div>
+        <div class="finding-row"><span class="k">Registro</span><span class="v">role-switch <code class="inline">QCOM0497</code> enumerado, <code class="inline">Service=UrsSynopsys</code>, <code class="inline">ConfigFlags=0</code> (habilitado). Não é driver faltando.</span></div>
+        <div class="finding-row"><span class="k">Por quê</span><span class="v">Falta o <code class="inline">qcpmictcc</code> (Type-C controller, no PMIC) → sem detecção de role → o dwc3 não vira host. Subproduto de B-01.</span></div>
+      </div>
+    </div>
+
+    <div class="finding">
+      <div class="finding-head"><span class="finding-id">B-04</span><span class="finding-title">WiFi sem driver · botões sem driver</span><span class="pill warn">confirmado</span></div>
+      <div class="finding-body">
+        <div class="finding-row"><span class="k">WiFi</span><span class="v">Só framework inbox (WifiCx/nwifi). Sem <code class="inline">qcwlan7150</code>. Único "adaptador" = KDNIC virtual. → WiFi+RDP fora (por ora).</span></div>
+        <div class="finding-row"><span class="k">Botões</span><span class="v">Sem <code class="inline">qcpmicgpio7150</code> (está no full set, depende do qcspmi).</span></div>
+        <div class="finding-row"><span class="k">Comum</span><span class="v">Ambos = drivers do full set não deployados / dependentes do PMIC. Mesma raiz.</span></div>
+      </div>
+    </div>
+
+    <div class="callout alert">
+      <span class="callout-title">Um nó, não quatro</span>
+      <p>Touch, USB, WiFi e botões parecem 4 problemas — mas são <strong>um</strong>: o PMIC/SPMI não está de pé no Windows. Resolver o <code class="inline">qcspmi</code> (B-01) destrava o PMIC → e com ele a AVDD (touch), o Type-C (OTG), o qcwlan (WiFi) e os botões, de uma vez.</p>
+    </div>
+  </div>
+</section>
+
+<!-- 04 SOLUCOES -->
+<section id="solucoes">
+  <div class="shell">
+    <div class="section-num">04 — Soluções tentadas</div>
+    <h2>O que já <em>viramos</em> de pedra.</h2>
+    <p>Cada tentativa cortou uma hipótese. O valor está no que ELIMINAMOS — sobrou um alvo único.</p>
+
+    <div class="comp-table">
+      <div class="comp-row c3 header"><div>Tentativa</div><div>Resultado</div><div>Aprendizado</div></div>
+      <div class="comp-row c3"><div class="field">Driver: timeout no I2C</div><div>❌ 0x101 persistiu</div><div>O hang está abaixo do timeout WDF (não é o driver do touch)</div></div>
+      <div class="comp-row c3"><div class="field">Driver: ISR vazio</div><div>❌ 0x101 persistiu</div><div>Confirma: não é o driver — é HW (IC mudo)</div></div>
+      <div class="comp-row c3"><div class="field">qcpep PMICVREGVOTE (AVDD)</div><div>❌ não pegou</div><div>Sem driver de PMIC, o voto não tem quem executar</div></div>
+      <div class="comp-row c3"><div class="field">SPMI cru no UEFI</div><div>❌ external abort</div><div>LDO11 é do EE4 (RPMh), APPS não escreve</div></div>
+      <div class="comp-row c3"><div class="field">RpmhDxe no UEFI</div><div>❌ DALSys crasha</div><div>Backend dopaemon não roda em subset</div></div>
+      <div class="comp-row c3"><div class="field">KDNET-EEM (debug)</div><div>❌ não conectou</div><div>USB morto → trava no logo. Revertido</div></div>
+      <div class="comp-row c3"><div class="field">OTG mouse / WiFi+RDP</div><div>❌ ambos mortos</div><div>Falta Type-C / qcwlan (full set)</div></div>
+      <div class="comp-row c3"><div class="field">README dos drivers</div><div>✅ a virada</div><div>O mínimo não tem PMIC. A parede = driver faltando + qcspmi-hang</div></div>
+    </div>
+    <p style="margin-top:14px;">Também provado/anotado: <strong>boot estável com touch off</strong> (TSC1 _STA=0); <strong>infra de debug offline</strong> (<code class="inline">hivexsh</code> lê hive sujo; <code class="inline">ntfsfix</code> limpa NTFS); o WoA do sweet boota sem o backend (a tese "backend é obrigatório pro boot" era falsa — mas o backend é necessário pro PMIC/touch).</p>
+  </div>
+</section>
+
+<!-- 05 COMANDOS -->
+<section id="comandos">
+  <div class="shell">
+    <div class="section-num">05 — Comandos</div>
+    <h2>A bancada — <em>como</em> fazer cada coisa.</h2>
+    <p>Folha de cola dos comandos que usamos. <code class="inline">adb</code> = <code class="inline">D:\sweet\platform-tools\adb.exe</code>. Cel em <strong>recovery</strong> pro acesso offline ao bloco.</p>
+
+    <h4>Subir as ntfstools pro /tmp do cel</h4>
+    <pre><code><span class="k">$adb</span>   = <span class="s">"D:\sweet\platform-tools\adb.exe"</span>
+<span class="k">$src</span>   = <span class="s">"E:\sweet_drivers\ntfstools"</span>
+<span class="k">$tools</span> = <span class="s">'mkntfs','wimlib-imagex','ntfscp','ntfscat','ntfsfix','ntfsls','ntfsinfo'</span>
+<span class="k">foreach</span> ($t <span class="k">in</span> $tools) { & $adb push (Join-Path $src $t) <span class="s">"/tmp/$t"</span> }
+& $adb shell <span class="s">"chmod 755 /tmp/ntfs* /tmp/mkntfs /tmp/wimlib-imagex"</span></code></pre>
+
+    <h4>Montar a MainOS (ntfs) no cel</h4>
+    <pre><code><span class="c"># sda35 = MainOS (Windows). Acesso DIRETO no bloco c/ ntfsXXX (sem mount).</span>
+mkdir -p /mnt/win
+mount -t ntfs /dev/block/by-name/Windows /mnt/win   <span class="c"># se o kernel tiver ntfs</span></code></pre>
+
+    <h4>Limpar estado sujo da NTFS</h4>
+    <pre><code>/tmp/ntfsfix /dev/block/sda35
+/tmp/ntfsfix -d /dev/block/sda35   <span class="c"># -d = limpa o dirty bit</span></code></pre>
+
+    <h4>Trocar um arquivo do Windows (ex.: o driver do touch)</h4>
+    <pre><code>& $adb push E:\cel\cel\drivers\gtx9886-driver\driver\kmdf\ARM64\Release\vhidmini\vhidmini.sys /tmp
+/tmp/ntfscp /dev/block/sda35 /tmp/vhidmini.sys /Windows/System32/drivers/vhidmini.sys</code></pre>
+
+    <h4>Ler logs do Windows offline</h4>
+    <pre><code>grep -ai <span class="s">"GDGT9889"</span> /mnt/win/Windows/INF/setupapi.dev.log
+grep -ai <span class="s">"vhidmini"</span> /mnt/win/Windows/INF/setupapi.dev.log
+<span class="c"># Hive sujo (reg do Windows) — hivexsh ignora o "dirty":</span>
+hivexsh /mnt/e/cel/SYSTEM   <span class="c"># cd \ControlSet001\Enum\ACPI\&lt;HID&gt;\&lt;inst&gt; ; ls ; lsval</span></code></pre>
+
+    <h4>Rebuild do UEFI (DSDT + imagem)</h4>
+    <pre><code>cd ~/sweet/uefi/edk2-sweet/F11/AcpiTables && iasl DSDT.dsl   <span class="c"># DSDT.dsl → DSDT.aml (0 errors)</span>
+cd ~/sweet/uefi/edk2-sweet && ./sweetbuild.sh                <span class="c"># gera sweet_uefi.img → flash</span></code></pre>
+
+    <h4>Injetar drivers numa WIM (DISM)</h4>
+    <pre><code>dism /Mount-Wim /WimFile:F:\install.wim /Index:1 /MountDir:C:\wmount
+dism /Image:C:\wmount /Add-Driver /Driver:E:\sweet_drivers\moorea /Recurse /ForceUnsigned
+dism /Unmount-Wim /MountDir:C:\wmount /Commit
+<span class="c"># Auditar o que entrou:  dism /Image:C:\wmount /Get-Drivers /Format:Table</span></code></pre>
+
+    <h4>Build do driver do touch (WDK)</h4>
+    <pre><code>msbuild <span class="s">"E:\cel\cel\drivers\gtx9886-driver\vhidmini2.sln"</span> /p:Configuration=Release /p:Platform=ARM64 ^
+        /t:Rebuild /p:SkipPackageVerification=true /p:EnableInf2cat=false
+<span class="c"># Saída: ...\driver\kmdf\ARM64\Release\vhidmini.sys (test-assinado)</span></code></pre>
+  </div>
+</section>
+
+<!-- 06 PLANO -->
+<section id="plano">
+  <div class="shell">
+    <div class="section-num">06 — Plano</div>
+    <h2>O caminho até o <em>toque</em>.</h2>
+    <p class="lead">O alvo é único e claro: destravar o <code class="inline">qcspmi</code> → subir o PMIC → e com ele cai tudo (touch + USB + WiFi + botões).</p>
+
+    <ol class="clean">
+      <li><strong>Visibilidade (serial).</strong> CP2102/FT232 (R$30–45) na UART <code class="inline">\_SB.UARD</code> @<code class="inline">0xA88000</code> — com level-shift 1.8V (UART do cel é 1.8V; o conversor é 3.3V). KDCOM → kd ao vivo.</li>
+      <li><strong>Ver o hang.</strong> Bootar com o full set (DSDT 14xx) → kd mostra <em>exatamente</em> onde o <code class="inline">qcspmi</code> pendura (qual acesso SPMI trava).</li>
+      <li><strong>Init mínima do SPMI no UEFI.</strong> Fazer só aquela inicialização (sem o backend inteiro que crasha) — ou achar no <a href="https://github.com/Project-Aloha/mu_aloha_platforms" style="color:var(--brick)">Project-Aloha</a> (fonte do moorea) como eles fazem.</li>
+      <li><strong>Subir o PMIC.</strong> Com o SPMI ok, <code class="inline">qcspmi</code>+<code class="inline">qcpmic</code> sobem → a <code class="inline">LDO11_C</code> pode ser votada.</li>
+      <li><strong>Acender o touch.</strong> AVDD on → IC responde → driver lê → toque. (E de quebra: Type-C/OTG, qcwlan/WiFi, botões.)</li>
+    </ol>
+
+    <div class="callout">
+      <span class="callout-title">Atalho possível (sem serial)</span>
+      <p>Deployar o full set + migrar o DSDT p/ 14xx + pôr o <code class="inline">qcspmi</code> como <strong>demand-start</strong> (em vez de boot-start). Se o hang for só timing de boot, isso desvia. Incerto (pode só mover o hang), mas é offline e barato de testar.</p>
+    </div>
+
+    <div class="callout success">
+      <span class="callout-title">Por que dá pra ter esperança</span>
+      <p>Saímos de uma "parede do PMIC" vaga para um alvo <strong>específico, nomeado e debugável</strong>: o boot-hang do <code class="inline">qcspmi</code>. Os drivers existem (Project-Aloha), o boot é estável, e a infra de debug/deploy offline está toda mapeada. Falta a visão (serial) e a init certa do SPMI.</p>
+    </div>
+  </div>
+</section>
+
+<footer>
+  <div class="shell">
+    <p>Sweet WoA · documento vivo · gerado jun/2026 · atualizar a cada round.<br>
+    Memória técnica detalhada: <code style="font-family:var(--mono);font-size:11px;color:var(--ink-2)">memory/edk2-sweet-woa-boots.md</code> · saga em markdown: <code style="font-family:var(--mono);font-size:11px;color:var(--ink-2)">docs/TOUCH-SAGA.md</code></p>
+  </div>
+</footer>
+
+</body>
+</html>

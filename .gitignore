@@ -1,0 +1,31 @@
+# Build artifacts / outputs
+*.img
+Build/
+Conf/
+
+# Working backups & temp files (DSDT/inc/dsc snapshots, registry hives, etc.)
+*.bak
+*.bak.*
+*.stripbak
+*.cur
+*.cur1
+*.pre-*
+*.aei-bak
+*.prebackend
+*.APRI
+
+# Windows / OS junk
+*Zone.Identifier
+Thumbs.db
+desktop.ini
+.DS_Store
+
+# Editors
+.vscode/
+.idea/
+
+# Tooling / Claude Code session
+.claude/
+
+# Misc backups (DSDT.aml.orig etc.) — note: *.dsl sources are NOT ignored
+*.orig

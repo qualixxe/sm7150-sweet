@@ -1,0 +1,40 @@
+#/** @file
+#
+#  I2cClockDxe - liga o clock do QUPv3 wrap1 SE1 (i2c 0xA84000) direto no GCC,
+#  sem o backend Qualcomm. Assim o qci2c do Windows funciona sem o Rpmh/ClockDxe.
+#
+#**/
+
+[Defines]
+  INF_VERSION                    = 0x00010005
+  BASE_NAME                      = I2cClockDxe
+  FILE_GUID                      = c10c4d3e-1f2a-4b5c-9d8e-7a6b5c4d3e2f
+  MODULE_TYPE                    = DXE_DRIVER
+  VERSION_STRING                 = 1.0
+  ENTRY_POINT                    = I2cClockEntryPoint
+
+[Sources]
+  I2cClockDxe.c
+
+[Packages]
+  MdePkg/MdePkg.dec
+  MdeModulePkg/MdeModulePkg.dec
+
+[LibraryClasses]
+  UefiDriverEntryPoint
+  IoLib
+  DebugLib
+  UefiBootServicesTableLib
+  UefiLib
+  CacheMaintenanceLib
+  DxeServicesTableLib
+
+[Protocols]
+  gEfiSimpleFileSystemProtocolGuid
+
+#
+# Roda cedo no DXE (DEPEX TRUE). O GCC (0x100000) ja esta mapeado pelo mem.h,
+# entao MmioWrite funciona direto.
+#
+[Depex]
+  TRUE

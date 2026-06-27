@@ -1,0 +1,286 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Sweet WoA · A Bancada · Comandos</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,300;9..144,400;9..144,500;9..144,600&family=JetBrains+Mono:wght@400;500;600&family=Manrope:wght@200;300;400;500;600;700&display=swap" rel="stylesheet">
+<style>
+:root {
+  --paper: #f4f0e8; --paper-2: #ebe5d8; --ink: #1a1814; --ink-2: #3a362e; --ink-3: #6a6458;
+  --rule: #c9c1ae; --brick: #a8402a; --brick-soft: #c26a52; --moss: #4a6340; --cream: #f9f5ea; --ochre: #b8873a;
+  --serif: 'Fraunces', Georgia, serif; --sans: 'Manrope', sans-serif; --mono: 'JetBrains Mono', monospace;
+}
+* { margin: 0; padding: 0; box-sizing: border-box; }
+html { scroll-behavior: smooth; }
+body { background: var(--paper); color: var(--ink); font-family: var(--sans); font-weight: 300; line-height: 1.6; -webkit-font-smoothing: antialiased; }
+body::before { content: ""; position: fixed; inset: 0; pointer-events: none; opacity: 0.4; z-index: 0;
+  background-image: radial-gradient(circle at 20% 30%, rgba(168,64,42,0.03) 0%, transparent 40%), radial-gradient(circle at 80% 70%, rgba(74,99,64,0.03) 0%, transparent 40%); }
+.shell { position: relative; z-index: 2; max-width: 1000px; margin: 0 auto; padding: 0 48px; }
+header { padding: 88px 0 48px; border-bottom: 1px solid var(--rule); }
+.eyebrow { font-family: var(--mono); font-size: 11px; text-transform: uppercase; letter-spacing: 0.25em; color: var(--brick); font-weight: 500; margin-bottom: 22px; }
+h1 { font-family: var(--serif); font-weight: 400; font-size: clamp(40px,6vw,64px); line-height: 1.05; letter-spacing: -0.02em; margin-bottom: 20px; font-variation-settings: "opsz" 144; }
+h1 em { font-style: italic; color: var(--brick); font-weight: 300; }
+.subtitle { font-size: 18px; line-height: 1.55; color: var(--ink-2); max-width: 760px; font-weight: 300; }
+.meta-line { font-family: var(--mono); font-size: 11px; color: var(--ink-3); margin-top: 26px; letter-spacing: 0.04em; display: flex; gap: 18px; flex-wrap: wrap; }
+.meta-line span b { color: var(--ink-2); font-weight: 600; }
+.toc-wrap { position: sticky; top: 0; z-index: 50; background: rgba(244,240,232,0.94); backdrop-filter: blur(6px); border-bottom: 1px solid var(--rule); padding: 13px 0; }
+.toc { display: flex; gap: 22px; flex-wrap: wrap; max-width: 1000px; margin: 0 auto; padding: 0 48px; }
+.toc a { font-family: var(--mono); font-size: 11px; text-transform: uppercase; letter-spacing: 0.1em; color: var(--ink-3); text-decoration: none; font-weight: 500; transition: color 0.15s; }
+.toc a:hover { color: var(--brick); }
+.toc a b { color: var(--brick); }
+section { padding: 52px 0; border-bottom: 1px solid var(--rule); }
+.section-num { font-family: var(--mono); font-size: 11px; color: var(--brick); letter-spacing: 0.22em; text-transform: uppercase; margin-bottom: 12px; font-weight: 500; }
+h2 { font-family: var(--serif); font-weight: 400; font-size: clamp(28px,4vw,40px); line-height: 1.1; letter-spacing: -0.015em; margin-bottom: 14px; font-variation-settings: "opsz" 80; }
+h2 em { font-style: italic; color: var(--brick); }
+h4 { font-family: var(--mono); font-size: 12px; text-transform: uppercase; letter-spacing: 0.1em; color: var(--ink-2); font-weight: 600; margin: 30px 0 0; }
+p { font-size: 15px; line-height: 1.65; color: var(--ink-2); margin-bottom: 14px; max-width: 800px; }
+code.inline { font-family: var(--mono); font-size: 12.5px; background: var(--paper-2); padding: 1px 6px; border-radius: 4px; color: var(--brick); font-weight: 500; }
+.note { font-size: 13px; color: var(--ink-3); margin: 6px 0 0; max-width: 800px; }
+.note b { color: var(--ink-2); }
+/* CMD block + copy */
+.cmd { position: relative; max-width: 900px; }
+.copy-btn {
+  position: absolute; top: 10px; right: 10px; z-index: 3;
+  font-family: var(--mono); font-size: 10px; text-transform: uppercase; letter-spacing: 0.08em; font-weight: 600;
+  color: #cdbf9f; background: #2a251d; border: 1px solid #463e30; border-radius: 5px;
+  padding: 4px 10px; cursor: pointer; transition: all 0.15s;
+}
+.copy-btn:hover { background: #3a3326; color: #f0d9a8; border-color: #6a5d44; }
+.copy-btn.done { color: #9bab7f; border-color: #4a6340; }
+pre { background: #1a1814; border: 1px solid #2f2a22; border-radius: 8px; padding: 16px 18px; overflow-x: auto; margin: 12px 0 18px; line-height: 1.6; }
+pre code { font-family: var(--mono); font-size: 12.5px; color: #d8d0bf; font-weight: 400; white-space: pre; }
+pre .c { color: #7a7363; font-style: italic; }
+pre .k { color: #c26a52; }
+pre .s { color: #9bab7f; }
+pre .v { color: #88a0c0; }
+pre .hl { color: #f0d9a8; font-weight: 600; }
+.callout { margin: 18px 0; padding: 16px 20px; background: var(--cream); border-left: 3px solid var(--ochre); font-size: 14px; color: var(--ink-2); line-height: 1.6; max-width: 880px; }
+.callout.alert { border-left-color: var(--brick); }
+.callout-title { font-family: var(--mono); font-size: 11px; text-transform: uppercase; letter-spacing: 0.1em; font-weight: 600; color: var(--ink); margin-bottom: 7px; display: block; }
+.callout.alert .callout-title { color: var(--brick); }
+footer { padding: 56px 0 90px; }
+footer p { font-family: var(--mono); font-size: 11px; color: var(--ink-3); letter-spacing: 0.04em; }
+@media (max-width: 720px) { .shell, .toc { padding: 0 22px; } }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="shell">
+    <div class="eyebrow">Sweet · Windows on ARM · Folha de Cola</div>
+    <h1>A <em>bancada</em>.</h1>
+    <p class="subtitle">Os comandos do port — copiar, colar, rodar. Clique em <b>copy</b> em qualquer bloco. <code class="inline">adb</code> = <code class="inline">D:\sweet\platform-tools\adb.exe</code> · cel em <strong>recovery</strong> pro acesso offline ao bloco (MainOS = <code class="inline">/dev/block/sda35</code>).</p>
+    <div class="meta-line">
+      <span><b>UEFI:</b> ~/sweet/uefi/edk2-sweet</span>
+      <span><b>Drivers:</b> E:\sweet_drivers</span>
+      <span><b>Touch src:</b> E:\cel\cel\drivers\gtx9886-driver</span>
+    </div>
+  </div>
+</header>
+
+<div class="toc-wrap">
+  <nav class="toc">
+    <a href="#setup"><b>01</b> Setup</a>
+    <a href="#mainos"><b>02</b> MainOS</a>
+    <a href="#deploy"><b>03</b> Deploy</a>
+    <a href="#ler"><b>04</b> Ler o Windows</a>
+    <a href="#uefi"><b>05</b> Build UEFI</a>
+    <a href="#drivers"><b>06</b> Drivers / DISM</a>
+    <a href="#touchdrv"><b>07</b> Driver touch</a>
+    <a href="#debug"><b>08</b> Debug</a>
+  </nav>
+</div>
+
+<!-- 01 SETUP -->
+<section id="setup">
+  <div class="shell">
+    <div class="section-num">01 — Setup</div>
+    <h2>Conectar e armar a <em>bancada</em>.</h2>
+
+    <h4>Conferir o cel (recovery)</h4>
+    <div class="cmd"><button class="copy-btn" onclick="cp(this)">copy</button><pre><code><span class="v">$adb</span> = <span class="s">"D:\sweet\platform-tools\adb.exe"</span>
+& <span class="v">$adb</span> devices       <span class="c"># deve listar:  c44c7086   recovery</span>
+& <span class="v">$adb</span> get-state</code></pre></div>
+
+    <h4>Subir as ntfstools pro /tmp do cel</h4>
+    <p class="note"><b>Nota:</b> o <code class="inline">/tmp</code> é RAM — some a cada power-cycle. Re-subir quando o cel reiniciar.</p>
+    <div class="cmd"><button class="copy-btn" onclick="cp(this)">copy</button><pre><code><span class="v">$adb</span>   = <span class="s">"D:\sweet\platform-tools\adb.exe"</span>
+<span class="v">$src</span>   = <span class="s">"E:\sweet_drivers\ntfstools"</span>
+<span class="v">$tools</span> = <span class="s">'mkntfs','wimlib-imagex','ntfscp','ntfscat','ntfsfix','ntfsls','ntfsinfo'</span>
+<span class="k">foreach</span> ($t <span class="k">in</span> <span class="v">$tools</span>) {
+  <span class="v">$p</span> = Join-Path <span class="v">$src</span> $t
+  <span class="k">if</span> (Test-Path <span class="v">$p</span>) { & <span class="v">$adb</span> push <span class="v">$p</span> <span class="s">"/tmp/$t"</span> | Out-Null; Write-Host <span class="s">"OK -> $t"</span> }
+  <span class="k">else</span> { Write-Host <span class="s">"FALTA: $p"</span> }
+}
+& <span class="v">$adb</span> shell <span class="s">"chmod 755 /tmp/ntfs* /tmp/mkntfs /tmp/wimlib-imagex; ls -l /tmp/ntfs*"</span></code></pre></div>
+  </div>
+</section>
+
+<!-- 02 MAINOS -->
+<section id="mainos">
+  <div class="shell">
+    <div class="section-num">02 — MainOS</div>
+    <h2>Acessar a partição do <em>Windows</em>.</h2>
+
+    <h4>Montar a MainOS (se o kernel tiver ntfs)</h4>
+    <div class="cmd"><button class="copy-btn" onclick="cp(this)">copy</button><pre><code>mkdir -p /mnt/win
+mount -t ntfs /dev/block/by-name/Windows /mnt/win</code></pre></div>
+
+    <h4>Limpar estado sujo da NTFS</h4>
+    <p class="note">Faça antes de ler/escrever se o Windows não fechou limpo (sempre, na prática).</p>
+    <div class="cmd"><button class="copy-btn" onclick="cp(this)">copy</button><pre><code>/tmp/ntfsfix /dev/block/sda35
+/tmp/ntfsfix -d /dev/block/sda35    <span class="c"># -d = limpa o dirty bit</span></code></pre></div>
+
+    <h4>Listar arquivos (sem montar)</h4>
+    <div class="cmd"><button class="copy-btn" onclick="cp(this)">copy</button><pre><code>/tmp/ntfsls /dev/block/sda35                                  <span class="c"># raiz</span>
+/tmp/ntfsls -l -p /Windows/System32/drivers /dev/block/sda35  <span class="c"># uma pasta</span></code></pre></div>
+  </div>
+</section>
+
+<!-- 03 DEPLOY -->
+<section id="deploy">
+  <div class="shell">
+    <div class="section-num">03 — Deploy</div>
+    <h2>Trocar um arquivo no <em>Windows</em>.</h2>
+
+    <h4>Ex.: o driver do touch (.sys)</h4>
+    <div class="cmd"><button class="copy-btn" onclick="cp(this)">copy</button><pre><code>& <span class="v">$adb</span> push E:\cel\cel\drivers\gtx9886-driver\driver\kmdf\ARM64\Release\vhidmini\vhidmini.sys /tmp
+& <span class="v">$adb</span> shell <span class="s">"/tmp/ntfscp /dev/block/sda35 /tmp/vhidmini.sys /Windows/System32/drivers/vhidmini.sys"</span></code></pre></div>
+
+    <h4>Verificar que gravou (hash)</h4>
+    <div class="cmd"><button class="copy-btn" onclick="cp(this)">copy</button><pre><code>& <span class="v">$adb</span> shell <span class="s">"/tmp/ntfscat /dev/block/sda35 /Windows/System32/drivers/vhidmini.sys > /tmp/back"</span>
+& <span class="v">$adb</span> pull /tmp/back E:\cel\back.sys
+(Get-FileHash E:\cel\back.sys).Hash   <span class="c"># comparar com o original</span></code></pre></div>
+  </div>
+</section>
+
+<!-- 04 LER -->
+<section id="ler">
+  <div class="shell">
+    <div class="section-num">04 — Ler o Windows</div>
+    <h2>Investigar <em>offline</em>.</h2>
+
+    <h4>Logs de instalação de driver (setupapi)</h4>
+    <div class="cmd"><button class="copy-btn" onclick="cp(this)">copy</button><pre><code>/tmp/ntfscat /dev/block/sda35 /Windows/INF/setupapi.dev.log > /tmp/sa.log
+grep -ai <span class="s">"GDGT9889"</span> /tmp/sa.log
+grep -ai <span class="s">"vhidmini"</span> /tmp/sa.log</code></pre></div>
+
+    <h4>Registro (hive SUJO) — hivexsh ignora o "dirty"</h4>
+    <p class="note">O <code class="inline">reg load</code> do Windows recusa hive sujo. O <code class="inline">hivexsh</code> (WSL, <code class="inline">/usr/bin</code>) lê direto.</p>
+    <div class="cmd"><button class="copy-btn" onclick="cp(this)">copy</button><pre><code><span class="c"># extrair o hive SYSTEM pro PC:</span>
+& <span class="v">$adb</span> shell <span class="s">"/tmp/ntfscat /dev/block/sda35 /Windows/System32/config/SYSTEM > /tmp/SYS"</span>
+& <span class="v">$adb</span> pull /tmp/SYS E:\cel\SYSTEM
+<span class="c"># ler no WSL (E: => /mnt/e):</span>
+wsl bash -c <span class="s">"printf 'cd \\ControlSet001\\Enum\\ACPI\\QCOM0497\\0\nlsval\n' | hivexsh /mnt/e/cel/SYSTEM"</span></code></pre></div>
+
+    <h4>Event log do Windows (offline, no PC)</h4>
+    <div class="cmd"><button class="copy-btn" onclick="cp(this)">copy</button><pre><code>& <span class="v">$adb</span> shell <span class="s">"/tmp/ntfscat /dev/block/sda35 /Windows/System32/winevt/Logs/System.evtx > /tmp/S.evtx"</span>
+& <span class="v">$adb</span> pull /tmp/S.evtx E:\cel\System.evtx
+Get-WinEvent -FilterHashtable @{Path=<span class="s">'E:\cel\System.evtx'</span>; Level=2,3} -MaxEvents 50 |
+  Select TimeCreated,Id,ProviderName,@{N=<span class="s">'Msg'</span>;E={($_.Message -split <span class="s">"`r?`n"</span>)[0]}} | Format-Table -Auto -Wrap</code></pre></div>
+
+    <h4>BCD (boot config) — a ESP é sda34 (FAT)</h4>
+    <div class="cmd"><button class="copy-btn" onclick="cp(this)">copy</button><pre><code>& <span class="v">$adb</span> shell <span class="s">"mkdir -p /tmp/esp; mount -o ro -t vfat /dev/block/sda34 /tmp/esp"</span>
+& <span class="v">$adb</span> pull /tmp/esp/EFI/Microsoft/Boot/BCD E:\cel\BCD_sweet
+bcdedit /store E:\cel\BCD_sweet /enum all      <span class="c"># precisa Admin</span></code></pre></div>
+  </div>
+</section>
+
+<!-- 05 UEFI -->
+<section id="uefi">
+  <div class="shell">
+    <div class="section-num">05 — Build UEFI</div>
+    <h2>Recompilar o <em>firmware</em>.</h2>
+
+    <h4>DSDT → AML + imagem (no WSL)</h4>
+    <div class="cmd"><button class="copy-btn" onclick="cp(this)">copy</button><pre><code>cd ~/sweet/uefi/edk2-sweet/F11/AcpiTables && iasl DSDT.dsl    <span class="c"># 0 Errors esperado</span>
+cd ~/sweet/uefi/edk2-sweet && ./sweetbuild.sh                 <span class="c"># gera sweet_uefi.img -> flash</span></code></pre></div>
+
+    <h4>Decompilar uma DSDT de referência</h4>
+    <div class="cmd"><button class="copy-btn" onclick="cp(this)">copy</button><pre><code>wsl bash -c <span class="s">"cd /caminho/AcpiTables && iasl -d DSDT.aml"</span>   <span class="c"># gera DSDT.dsl</span></code></pre></div>
+  </div>
+</section>
+
+<!-- 06 DRIVERS -->
+<section id="drivers">
+  <div class="shell">
+    <div class="section-num">06 — Drivers / DISM</div>
+    <h2>Injetar drivers na <em>imagem</em>.</h2>
+
+    <h4>Mínimo vs completo (E:\sweet_drivers)</h4>
+    <p class="note"><b>inject_min.bat</b> = só qcgpio+qci2c+touch (atual). <b>inject.bat</b> = moorea completo (PMIC, SPMI, WLAN, Type-C, botões).</p>
+
+    <h4>DISM manual numa WIM</h4>
+    <div class="cmd"><button class="copy-btn" onclick="cp(this)">copy</button><pre><code>dism /Mount-Wim /WimFile:F:\install.wim /Index:1 /MountDir:C:\wmount
+dism /Image:C:\wmount /Add-Driver /Driver:E:\sweet_drivers\moorea /Recurse /ForceUnsigned
+dism /Image:C:\wmount /Get-Drivers /Format:Table        <span class="c"># auditar o que entrou</span>
+dism /Unmount-Wim /MountDir:C:\wmount /Commit</code></pre></div>
+  </div>
+</section>
+
+<!-- 07 TOUCH DRV -->
+<section id="touchdrv">
+  <div class="shell">
+    <div class="section-num">07 — Driver do touch</div>
+    <h2>Compilar o <em>vhidmini</em> (WDK).</h2>
+    <p class="note">As 2 flags são obrigatórias: pulam InfVerif e inf2cat. O .sys sai test-assinado mesmo assim.</p>
+    <div class="cmd"><button class="copy-btn" onclick="cp(this)">copy</button><pre><code>msbuild <span class="s">"E:\cel\cel\drivers\gtx9886-driver\vhidmini2.sln"</span> `
+  /p:Configuration=Release /p:Platform=ARM64 /t:Rebuild `
+  /p:SkipPackageVerification=true /p:EnableInf2cat=false
+<span class="c"># Saida: ...\driver\kmdf\ARM64\Release\vhidmini.sys</span></code></pre></div>
+  </div>
+</section>
+
+<!-- 08 DEBUG -->
+<section id="debug">
+  <div class="shell">
+    <div class="section-num">08 — Debug</div>
+    <h2>Quando a <em>serial</em> chegar (KDCOM) / KDNET.</h2>
+
+    <h4>Ligar o debug no BCD (offline, Admin)</h4>
+    <p class="note">Sintaxe: tipo PRIMEIRO, params com <code class="inline">:</code>. KDNET-EEM: hostip fixo 169.254.255.255, busparams 1 (DBG2 entry do USB).</p>
+    <div class="cmd"><button class="copy-btn" onclick="cp(this)">copy</button><pre><code>bcdedit /store E:\cel\BCD_sweet /dbgsettings NET HOSTIP:169.254.255.255 PORT:50005 KEY:1234.5678.9abc.def0
+bcdedit /store E:\cel\BCD_sweet /set <span class="s">"{dbgsettings}"</span> busparams 1
+bcdedit /store E:\cel\BCD_sweet /set <span class="s">"{dbgsettings}"</span> dhcp No
+bcdedit /store E:\cel\BCD_sweet /set <span class="s">"{default}"</span> debug on
+bcdedit /store E:\cel\BCD_sweet /dbgsettings           <span class="c"># conferir</span></code></pre></div>
+
+    <h4>Devolver o BCD pra ESP (rw)</h4>
+    <div class="cmd"><button class="copy-btn" onclick="cp(this)">copy</button><pre><code>& <span class="v">$adb</span> shell <span class="s">"umount /tmp/esp 2>/dev/null; mount -o rw -t vfat /dev/block/sda34 /tmp/esp"</span>
+& <span class="v">$adb</span> push E:\cel\BCD_sweet /tmp/BCD_new
+& <span class="v">$adb</span> shell <span class="s">"cp /tmp/BCD_new /tmp/esp/EFI/Microsoft/Boot/BCD; sync"</span></code></pre></div>
+
+    <div class="callout alert">
+      <span class="callout-title">⚠ Serial 1.8V</span>
+      <p>A UART de debug do cel (<code class="inline">\_SB.UARD</code> @ <code class="inline">0xA88000</code>) é <strong>1.8V</strong>. O CP2102/FT232 é 3.3V → use <strong>level-shifter</strong> (ou o VCCIO do FT232 em 1.8V). NÃO ligue direto — queima o cel.</p>
+    </div>
+  </div>
+</section>
+
+<footer>
+  <div class="shell">
+    <p>Sweet WoA · folha de cola · jun/2026 · companheira do <code style="font-family:var(--mono);font-size:11px;color:var(--ink-2)">sweet-woa-saga.html</code></p>
+  </div>
+</footer>
+
+<script>
+function cp(btn){
+  var t = btn.nextElementSibling.querySelector('code').innerText;
+  function done(){ btn.textContent='copiado!'; btn.classList.add('done'); setTimeout(function(){ btn.textContent='copy'; btn.classList.remove('done'); }, 1300); }
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(t).then(done, fallback);
+  } else { fallback(); }
+  function fallback(){
+    var ta=document.createElement('textarea'); ta.value=t; ta.style.position='fixed'; ta.style.opacity='0';
+    document.body.appendChild(ta); ta.focus(); ta.select();
+    try{ document.execCommand('copy'); }catch(e){}
+    document.body.removeChild(ta); done();
+  }
+}
+</script>
+
+</body>
+</html>
