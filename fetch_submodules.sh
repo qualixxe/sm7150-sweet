@@ -31,6 +31,16 @@ mapfile -t paths < <(
 printf '  %s\n' "${paths[@]}"
 git -C edk2 submodule update --jobs 4 "${paths[@]}"
 
+# SimpleInit is a package the build reads headers from directly, and one of its
+# own submodules is not optional: SimpleInit.dec lists libs/freetype/include in
+# [Includes], so without it the build stops at the very first meta-data pass
+# with "File/directory not found in workspace". Its submodule update therefore
+# has to recurse.
+echo
+echo "=== SimpleInit nested submodules ==="
+git -C F11/Library/SimpleInit submodule init
+git -C F11/Library/SimpleInit submodule update --jobs 4 --recursive
+
 echo
 echo "=== edk2-platforms nested submodules ==="
 git -C edk2-platforms submodule init
@@ -54,7 +64,8 @@ for path in \
     edk2/BaseTools/Source/C/BrotliCompress/brotli \
     edk2/CryptoPkg/Library/OpensslLib/openssl \
     Dxe/EFI_Binaries \
-    F11/Library/SimpleInit/SimpleInit.inc
+    F11/Library/SimpleInit/SimpleInit.inc \
+    F11/Library/SimpleInit/libs/freetype/include
 do
     if [ -e "$path" ]; then
         echo "  ok      $path"
