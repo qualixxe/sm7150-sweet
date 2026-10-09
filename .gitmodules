@@ -1,6 +1,8 @@
+# Our fork, not upstream: it carries the launcher credit change. Point this back
+# at BigfootACA/simple-init to build the GUI exactly as upstream ships it.
 [submodule "F11/Library/SimpleInit"]
 	path = F11/Library/SimpleInit
-	url = https://github.com/BigfootACA/simple-init.git
+	url = https://github.com/qualixxe/simple-init.git
 [submodule "edk2"]
 	path = edk2
 	url = https://github.com/tianocore/edk2
