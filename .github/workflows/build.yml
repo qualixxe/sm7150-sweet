@@ -22,12 +22,16 @@ jobs:
     timeout-minutes: 180
 
     steps:
-      # Recursive: edk2 has its own submodules (BaseTools), and the prebuilt DXE
-      # binaries come from a fourth one. Without them the build cannot link.
       - uses: actions/checkout@v4
         with:
-          submodules: recursive
+          # Not recursive: see fetch_submodules.sh. One of edk2's nested
+          # submodules points at a repository that no longer exists, and a plain
+          # recursive checkout aborts the whole job on it.
+          submodules: false
           fetch-depth: 0
+
+      - name: Fetch submodules
+        run: bash ./fetch_submodules.sh
 
       - name: Install dependencies
         run: |
