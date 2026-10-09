@@ -1,42 +1,65 @@
-# This is a basic workflow to help you get started with Actions
+name: Build UEFI (courbet, SM7325)
 
-name: EDK2 Redmi Note 10 Pro
-
-# Controls when the action will run. Triggers the workflow on push or pull request
-# events but only for the master branch
+# The upstream workflow in this fork's history triggered on "master" while the
+# branch is "main", so it never ran on a push. This one triggers on the branch
+# that actually exists.
 on:
   push:
-    branches: [master]
+    branches: [main]
   pull_request:
-    branches: [master]
+  workflow_dispatch:
 
-# A workflow run is made up of one or more jobs that can run sequentially or in parallel
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
-  # This workflow contains a single job called "build"
   build:
-    name: Image Build
-    # The type of runner that the job will run on
-    runs-on: ubuntu-latest
+    name: Firmware build
+    # 22.04 rather than latest: the upstream build expects python3-distutils,
+    # which newer runners no longer ship.
+    runs-on: ubuntu-22.04
+    timeout-minutes: 180
 
-    # Steps represent a sequence of tasks that will be executed as part of the job
     steps:
-      # Checks-out your repository under $GITHUB_WORKSPACE, so your job can access it
-      - name: Checkout repository
-        uses: actions/checkout@v3
+      # Recursive: edk2 has its own submodules (BaseTools), and the prebuilt DXE
+      # binaries come from a fourth one. Without them the build cannot link.
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          fetch-depth: 0
 
-      - name: Install requires packages
+      - name: Install dependencies
         run: |
           sudo apt-get update
-          sudo apt-get -y install build-essential uuid-dev clang llvm iasl nasm gcc-aarch64-linux-gnu abootimg python3-distutils python3-pil python3-git gettext
+          sudo apt-get install -y --no-install-recommends \
+            build-essential uuid-dev clang llvm iasl nasm \
+            gcc-aarch64-linux-gnu abootimg \
+            python3 python3-distutils python3-pil python3-git gettext \
+            cpio zip unzip
 
-      - name: Build device Redmi Note 10 Pro
+      - name: Build firmware
         run: |
-          ./build_common.sh
-          ./sweetbuild.sh
+          bash ./sweetbuild.sh
 
-      - name: Upload a Build Artifact
-        uses: actions/upload-artifact@v3
-        with: # Artifact name
-          name: Redmi Note 10 Pro
-          # A file, directory or wildcard pattern that describes what to upload
-          path: ./*.img
+      - name: Build device tree variants
+        run: |
+          chmod +x package_variants.sh
+          bash ./package_variants.sh
+
+      - name: Verify each variant
+        run: |
+          set -e
+          for img in out/*.img; do
+            case "$img" in *-128m.img) continue ;; esac
+            echo "=== $img ==="
+            python3 tools/verify_boot_image.py "$img"
+          done
+
+      - name: Upload
+        uses: actions/upload-artifact@v4
+        with:
+          name: courbet-uefi
+          path: out/
+          if-no-files-found: error
+          retention-days: 30
