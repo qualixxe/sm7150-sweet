@@ -10,12 +10,16 @@
 #
 # There is no framebuffer console to print to. The device tree has no
 # simple-framebuffer node and the panel is driven by the Qualcomm display
-# controller, which nothing in this ramdisk starts, so `console=tty0` produces
-# nothing at all. That is why the first attempt showed a black screen.
+# controller, which nothing in a ramdisk starts, so console=tty0 produces
+# nothing at all. The report is therefore handed over USB: whichever gadget
+# function the kernel has is bound, the phone takes 192.168.42.1, hands the PC an
+# address, and serves the text over HTTP.
 #
-# So the report is handed over two other ways:
-#   - over USB, as a network device serving the text over HTTP
-#   - through the vibration motor, as a short burst code, in case USB fails
+# Nothing here touches the vibration motor. The previous version buzzed once at
+# startup and the phone rebooted about ten seconds later. The device tree marks
+# the vibrator node qcom,vib-ldo-volt-uv, an under-voltage flag, so driving the
+# LDO from a cold boot may well be what tripped the reset. The cost of guessing
+# wrong was a whole boot cycle, so the motor is left alone.
 #
 # Everything here is read-only. No partition is written, no filesystem is
 # modified, every mount is -o ro.
@@ -31,13 +35,9 @@ $B mount -t proc     proc     /proc
 $B mount -t sysfs    sysfs    /sys
 $B mount -t devtmpfs devtmpfs /dev 2>/dev/null
 
-# The whole report is written here, then echoed to the console for anyone with
-# a serial line, then served and signalled.
 exec 3>"$REPORT"
 
 r()  { echo "$*" >&3; echo "$*"; }
-rn() { echo "$*" >&3; }          # to the file only
-blank() { echo "" >&3; echo ""; }
 
 DISK=""
 SECSIZE=512
@@ -58,41 +58,55 @@ le() {
     echo $v
 }
 
-# Buzz the motor N times. This is the only channel that works with no screen and
-# no USB, so it is how "it ran at all" gets confirmed.
-buzz() {
-    n=$1
-    dir=""
-    for d in /sys/class/leds/*vibrator* /sys/class/leds/*; do
-        [ -w "$d/brightness" ] || continue
-        case "$(basename "$d")" in
-            *vibrator*|*vib*) dir="$d"; break ;;
-        esac
+# ---------------------------------------------------------------- watchdog
+
+# The phone reboots on its own a few seconds after userspace starts, with the
+# stock Android ramdisk as well as with this one. That points at a watchdog left
+# armed by the bootloader rather than at anything in the ramdisk.
+#
+# Disable every watchdog the kernel exposes. Writing V to /dev/watchdog is the
+# Linux way to disarm one that is marked as not nowayout, and closing the file
+# without writing V would make the kernel stop it. Both are attempted, and a
+# background pet loop runs regardless, in case a watchdog can be fed but not
+# turned off.
+watchdog_off() {
+    for wd in /sys/class/watchdog/*; do
+        [ -e "$wd" ] || continue
+        echo "  watchdog $(basename "$wd") identity=$(cat "$wd/identity" 2>/dev/null)" >&3
+        echo 0 > "$wd/timeout" 2>/dev/null
     done
-    [ -n "$dir" ] || return 0
-    i=0
-    while [ "$i" -lt "$n" ]; do
-        max=$($B cat "$dir/max_brightness" 2>/dev/null)
-        case "$max" in ''|*[!0-9]*) max=255 ;; esac
-        echo $max > "$dir/brightness" 2>/dev/null
-        $B sleep 0.4
-        echo 0 > "$dir/brightness" 2>/dev/null
-        $B sleep 0.4
-        i=$(( i + 1 ))
+    for dev in /dev/watchdog /dev/watchdog0; do
+        [ -e "$dev" ] || continue
+        echo V > "$dev" 2>/dev/null && echo "  disarmed $dev" >&3
+        echo 1 > "$dev" 2>/dev/null
     done
 }
+watchdog_off
 
-buzz 1
+pet_loop() {
+    while true; do
+        for dev in /dev/watchdog /dev/watchdog0; do
+            [ -e "$dev" ] && echo 1 > "$dev" 2>/dev/null
+        done
+        $B sleep 5
+    done
+}
+pet_loop &
+
+# ---------------------------------------------------------------- report
+
 r "########################################"
-r "########   COURBET LINUX PREP v2   #####"
+r "########   COURBET LINUX PREP v3   #####"
 r "########################################"
 r ""
 r "cmdline: $($B cat /proc/cmdline)"
 r "kernel : $($B uname -a)"
-r "kernel config available: $([ -r /proc/config.gz ] && echo yes || echo no)"
+r "config.gz readable: $([ -r /proc/config.gz ] && echo yes || echo no)"
+r "watchdog nodes: $(ls /sys/class/watchdog 2>/dev/null | tr '\n' ' ')"
+r "usb configfs: $([ -d /sys/kernel/config/usb_gadget ] && echo present || echo absent)"
+r "udc: $(ls /sys/class/udc 2>/dev/null | tr '\n' ' ')"
 r ""
 
-blank
 r "=== BLOCK DEVICES ==="
 for d in /sys/class/block/*; do
     [ -e "$d" ] || continue
@@ -107,7 +121,6 @@ for d in /sys/class/block/*; do
 done
 r ""
 
-blank
 r "=== GPT ==="
 for cand in sda sdb mmcblk0 mmcblk1 nvme0n1; do
     [ -e "/dev/block/$cand" ] || continue
@@ -151,7 +164,7 @@ if [ -n "$DISK" ]; then
     fi
 fi
 
-blank
+r ""
 r "=== IS /data READABLE? ==="
 # By name in the GPT, not through /dev/block/by-name: those symlinks come from
 # Android's ueventd and a bare ramdisk has none.
@@ -187,25 +200,22 @@ else
 fi
 r ""
 r "RESULT: /data readable = $READABLE"
-buzz 3
-[ "$READABLE" = "yes" ] || buzz 1
 
-# ---------------------------------------------------------------- output over USB
+# ---------------------------------------------------------------- USB output
 
-blank
+r ""
 r "=== USB ==="
 UDC=""
 for u in /sys/class/udc/*; do
     [ -e "$u" ] && { UDC=$(basename "$u"); break; }
 done
 r "udc: ${UDC:-none}"
-r "configfs: $([ -d /sys/kernel/config/usb_gadget ] && echo present || echo absent)"
+r ""
 
-MADE=""
 if [ -n "$UDC" ]; then
     $B mount -t configfs none /sys/kernel/config 2>/dev/null
     G=/sys/kernel/config/usb_gadget
-    if [ -d "$G" ] || $B mkdir -p "$G/ub" 2>/dev/null; then
+    if $B mkdir -p "$G/ub" 2>/dev/null; then
         cd "$G/ub" || cd /tmp
         $B mkdir -p strings/0x409 configs/c.1/strings/0x409 2>/dev/null
         echo 0x18d1 > idVendor 2>/dev/null
@@ -215,15 +225,11 @@ if [ -n "$UDC" ]; then
         echo "prep" > strings/0x409/product 2>/dev/null
         echo "prep" > configs/c.1/strings/0x409/configuration 2>/dev/null
 
-        # Which of these the kernel actually has is not knowable from here, so
-        # try them in order of how much they give us: a network one first, a
-        # serial one last.
+        MADE=""
         for fn in ecm.usb0 ncm.usb0 rndis.usb0 acm.usb0 ffs.usb0; do
             $B mkdir -p "functions/$fn" 2>/dev/null || continue
-            r "  function $fn available"
-            if [ "$fn" = "rndis.usb0" ]; then
-                echo RNDIS > "functions/$fn/rmnet_type" 2>/dev/null
-            fi
+            r "  function $fn is available"
+            [ "$fn" = "rndis.usb0" ] && echo RNDIS > "functions/$fn/rmnet_type" 2>/dev/null
             $B ln -s "functions/$fn" configs/c.1/ 2>/dev/null
             MADE="$fn"
             break
@@ -232,9 +238,14 @@ if [ -n "$UDC" ]; then
         if [ -n "$MADE" ]; then
             echo "$UDC" > UDC 2>/dev/null
             r "  bound $MADE to $UDC"
-            buzz 2
+        else
+            r "  no gadget function could be created"
         fi
+    else
+        r "  usb_gadget could not be created"
     fi
+else
+    r "  no UDC present, cannot present as a USB device"
 fi
 
 if [ "$MADE" != "acm.usb0" ]; then
@@ -244,9 +255,6 @@ if [ "$MADE" != "acm.usb0" ]; then
     done
     r "  interface: ${NIC:-none}"
     if [ -n "$NIC" ]; then
-        # Address the phone fixed, and hand one out to the PC. Doing both sides
-        # with static addresses would need manual configuration of the adapter
-        # on Windows, which is one more thing to get wrong.
         $B ifconfig "$NIC" 192.168.42.1 netmask 255.255.255.0 up 2>/dev/null
         cat > /tmp/udhcpd.conf <<EOF
 start 192.168.42.100
@@ -254,24 +262,20 @@ end   192.168.42.200
 lease_time 86400
 script /udhcpc.script
 EOF
-        $B udhcpd -f -r -l /tmp/leases.txt -p 0 /tmp/udhcpd.conf 2>/dev/null &
+        $B udhcpd -f -r -l /tmp/leases.txt /tmp/udhcpd.conf 2>/dev/null &
         $B sleep 3
-        r "  phone is at 192.168.42.1"
-        r "  the PC gets 192.168.42.100-200, report at:"
-        r "    http://192.168.42.1:8080/report.txt"
-        buzz 4
+        r "  phone at 192.168.42.1, report at http://192.168.42.1:8080/report.txt"
     fi
-    cp "$REPORT" /www/report.txt
-    $B httpd -f -p 8080 -h /www
 fi
 
-blank
+cp "$REPORT" /www/report.txt
 r ""
-r "end of report. hold power ~15 s to leave."
-r ""
+r "end of report."
 
-# Stay up so the PC can read it. Rebooting on our own would drop the user back
-# into fastboot unannounced, which is not a thing to do to someone's phone.
-while true; do
-    $B sleep 60
-done
+# httpd last, so it serves the file that was just written, and stays in the
+# foreground: it is the only thing keeping this alive that is doing work.
+if [ "$MADE" = "acm.usb0" ]; then
+    $B sleep 3600
+else
+    $B httpd -f -p 8080 -h /www
+fi
