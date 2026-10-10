@@ -1,0 +1,28 @@
+#!/bin/sh
+# DHCP lease handler for busybox udhcpc and udhcpd.
+#
+# Both need a script at a path that does not exist in a ramdisk - the usual
+# /usr/share/udhcpc/default.script ships with the udhcpc package, not with the
+# busybox binary - and both abort if it is missing.
+#
+# udhcpc calls it with "bound" once a lease arrives. udhcpd calls it with
+# "start" and "stop" to attach and detach the interface it is handing out.
+#
+# Everything the script touches is the USB interface the PC is on. Nothing here
+# can reach the phone's own storage.
+
+case "$1" in
+    deconfig)
+        /bin/busybox ifconfig "$interface" 0.0.0.0
+        ;;
+    renew|bound)
+        /bin/busybox ifconfig "$interface" "$ip" netmask "${subnet##*/}" up
+        ;;
+    start)
+        /bin/busybox ifconfig "$interface" "${server##*/}" netmask 255.255.255.0 up
+        ;;
+    stop)
+        /bin/busybox ifconfig "$interface" 0.0.0.0
+        ;;
+esac
+exit 0

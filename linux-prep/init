@@ -6,22 +6,38 @@
 # give the File Manager nothing to mount, so storage cannot be judged from there.
 # This boots the phone's own kernel instead and reads the block devices directly.
 #
-# It is loaded with `fastboot boot`, so nothing is written to flash. Output goes
-# to the framebuffer console, one page at a time with pauses, because there is no
-# UART and a photograph is the only way to read the screen.
+# Loaded with `fastboot boot`, so nothing is written to flash.
+#
+# There is no framebuffer console to print to. The device tree has no
+# simple-framebuffer node and the panel is driven by the Qualcomm display
+# controller, which nothing in this ramdisk starts, so `console=tty0` produces
+# nothing at all. That is why the first attempt showed a black screen.
+#
+# So the report is handed over two other ways:
+#   - over USB, as a network device serving the text over HTTP
+#   - through the vibration motor, as a short burst code, in case USB fails
 #
 # Everything here is read-only. No partition is written, no filesystem is
-# modified, and every mount is -o ro, so a mistake cannot cost anything.
+# modified, every mount is -o ro.
 
 PATH=/bin:/sbin:/usr/sbin:/usr/bin
 export PATH
 
 B=/bin/busybox
 
-$B mkdir -p /proc /sys /dev /tmp /mnt
+REPORT=/tmp/report.txt
+$B mkdir -p /proc /sys /dev /tmp /mnt /www
 $B mount -t proc     proc     /proc
 $B mount -t sysfs    sysfs    /sys
 $B mount -t devtmpfs devtmpfs /dev 2>/dev/null
+
+# The whole report is written here, then echoed to the console for anyone with
+# a serial line, then served and signalled.
+exec 3>"$REPORT"
+
+r()  { echo "$*" >&3; echo "$*"; }
+rn() { echo "$*" >&3; }          # to the file only
+blank() { echo "" >&3; echo ""; }
 
 DISK=""
 SECSIZE=512
@@ -29,29 +45,8 @@ ENTRY_LBA=0
 NENTRIES=0
 ENTSIZE=0
 
-say()  { $B echo "$*"; }
-head1() {
-    say ""
-    say "========================================"
-    say "$*"
-    say "========================================"
-}
-pause() {
-    say ""
-    say "--- page $PAGE done, next in 20s ---"
-    $B sleep 20
-    say ""
-    say "########################################"
-    say "#########  PAGE $((PAGE + 1))  #########"
-    say "########################################"
-    PAGE=$((PAGE + 1))
-}
-PAGE=1
-
-# Read a little-endian unsigned integer of 1, 2, 4 or 8 bytes from a file.
-#
-# busybox od has no reliable -w in every build, so each byte is pulled separately
-# and folded here. $1 file, $2 offset, $3 width in bytes.
+# Read a little-endian unsigned integer from a file. busybox od has no reliable
+# -w in every build, so each byte is pulled separately and folded here.
 le() {
     set -- $($B od -An -tx1 -j "$2" -N "$3" "$1")
     v=0
@@ -63,27 +58,42 @@ le() {
     echo $v
 }
 
-# ---------------------------------------------------------------------- page 1
+# Buzz the motor N times. This is the only channel that works with no screen and
+# no USB, so it is how "it ran at all" gets confirmed.
+buzz() {
+    n=$1
+    dir=""
+    for d in /sys/class/leds/*vibrator* /sys/class/leds/*; do
+        [ -w "$d/brightness" ] || continue
+        case "$(basename "$d")" in
+            *vibrator*|*vib*) dir="$d"; break ;;
+        esac
+    done
+    [ -n "$dir" ] || return 0
+    i=0
+    while [ "$i" -lt "$n" ]; do
+        max=$($B cat "$dir/max_brightness" 2>/dev/null)
+        case "$max" in ''|*[!0-9]*) max=255 ;; esac
+        echo $max > "$dir/brightness" 2>/dev/null
+        $B sleep 0.4
+        echo 0 > "$dir/brightness" 2>/dev/null
+        $B sleep 0.4
+        i=$(( i + 1 ))
+    done
+}
 
-say "########################################"
-say "########   COURBET LINUX PREP v1   #####"
-say "########################################"
-say ""
-say "phone's own kernel, our ramdisk."
-say "nothing was written to the phone."
-say ""
-say "cmdline:"
-$B cat /proc/cmdline
-say ""
-say "kernel:"
-$B uname -a
+buzz 1
+r "########################################"
+r "########   COURBET LINUX PREP v2   #####"
+r "########################################"
+r ""
+r "cmdline: $($B cat /proc/cmdline)"
+r "kernel : $($B uname -a)"
+r "kernel config available: $([ -r /proc/config.gz ] && echo yes || echo no)"
+r ""
 
-pause
-
-# ---------------------------------------------------------------------- page 2
-
-head1 "BLOCK DEVICES"
-
+blank
+r "=== BLOCK DEVICES ==="
 for d in /sys/class/block/*; do
     [ -e "$d" ] || continue
     name=$($B basename "$d")
@@ -91,178 +101,177 @@ for d in /sys/class/block/*; do
         dm-*|loop*|ram*|zram*|md*|nbd*) continue ;;
     esac
     sectors=$($B cat "$d/size" 2>/dev/null)
-    case "$sectors" in
-        ''|*[!0-9]*) continue ;;
-    esac
+    case "$sectors" in ''|*[!0-9]*) continue ;; esac
     [ "$sectors" -gt 0 ] || continue
-    say ""
-    say "  $name   $((sectors / 2048)) MB   /dev/block/$name"
+    r "  $name   $((sectors / 2048)) MB"
 done
+r ""
 
-pause
-
-# ---------------------------------------------------------------------- page 3
-
-head1 "PARTITION TABLE (GPT)"
-
-say ""
-say "looking for a whole disk..."
+blank
+r "=== GPT ==="
 for cand in sda sdb mmcblk0 mmcblk1 nvme0n1; do
-    if [ -e "/dev/block/$cand" ]; then
-        parts=$(ls /sys/class/block/"$cand"/ 2>/dev/null | grep -c '' || true)
-        has_child=0
-        for p in /sys/class/block/"$cand"/*; do
-            [ -e "$p" ] && has_child=1 && break
-        done
-        if [ "$has_child" = "0" ]; then
-            DISK=/dev/block/$cand
-            break
-        fi
-    fi
+    [ -e "/dev/block/$cand" ] || continue
+    has_child=0
+    for p in /sys/class/block/"$cand"/*; do
+        [ -e "$p" ] && has_child=1 && break
+    done
+    [ "$has_child" = "0" ] && { DISK=/dev/block/$cand; break; }
 done
+r "disk: ${DISK:-none}"
 
-if [ -z "$DISK" ]; then
-    say "  no whole-disk device found"
-else
-    say "  disk is $DISK"
-    # LBA 0 and the GPT header live in the first three sectors.
+if [ -n "$DISK" ]; then
     $B dd if="$DISK" bs=512 count=3 2>/dev/null > /tmp/gpthdr
-
     sig=$($B dd if=/tmp/gpthdr bs=1 skip=512 count=8 2>/dev/null | $B tr -d '\000')
-    say ""
-    say "  LBA0 MBR signature : $($B od -An -tx1 -j 440 -N 2 /tmp/gpthdr | $B tr -d ' \n')"
-    say "  GPT signature      : '${sig}'  (expect EFI PART)"
-
+    r "GPT signature: '${sig}'"
     if [ "$sig" = "EFI PART" ]; then
         SECSIZE=$(le /tmp/gpthdr 536 4)
         ENTRY_LBA=$(le /tmp/gpthdr 584 8)
         NENTRIES=$(le /tmp/gpthdr 592 4)
         ENTSIZE=$(le /tmp/gpthdr 596 4)
         LAST_USABLE=$(le /tmp/gpthdr 640 8)
-        say ""
-        say "  sector size        : $SECSIZE"
-        say "  entry table at LBA : $ENTRY_LBA"
-        say "  entries            : $NENTRIES x $ENTSIZE bytes"
-        say "  last usable LBA    : $LAST_USABLE"
-        say "  disk capacity      : $(( (LAST_USABLE + 1) * SECSIZE / 1024 / 1024 )) MB"
-        say ""
-        say "  reading the entry table in one pass..."
+        r "sector ${SECSIZE}  entries ${NENTRIES} x ${ENTSIZE} at LBA ${ENTRY_LBA}"
+        r "capacity $(( (LAST_USABLE + 1) * SECSIZE / 1024 / 1024 )) MB"
         $B dd if="$DISK" bs=512 skip="$ENTRY_LBA" \
              count=$(( (NENTRIES * ENTSIZE + 511) / 512 )) 2>/dev/null > /tmp/gpt
-        say "  read $((NENTRIES * ENTSIZE)) bytes into /tmp/gpt"
+        r ""
+        r "=== PARTITIONS ==="
+        i=0
+        while [ "$i" -lt "$NENTRIES" ]; do
+            $B dd if=/tmp/gpt bs=1 skip=$(( i * 128 )) count=128 of=/tmp/e 2>/dev/null
+            if [ "$($B od -An -tx1 -N4 /tmp/e | $B tr -d ' \n')" != "00000000" ]; then
+                name=$($B dd if=/tmp/e bs=1 skip=56 count=72 2>/dev/null | \
+                       $B tr -d '\000' | $B cut -c1-36)
+                first=$(le /tmp/e 32 8)
+                last=$(le /tmp/e 40 8)
+                r "  [$(printf '%2d' "$i")] ${name:-<unnamed>}" \
+                  "LBA $first..$last  $(( (last - first + 1) * SECSIZE / 1024 )) MB"
+            fi
+            i=$(( i + 1 ))
+        done
     fi
 fi
 
-pause
-
-# ---------------------------------------------------------------------- page 4
-
-head1 "GPT PARTITIONS"
-
-if [ -n "$DISK" ] && [ "$ENTSIZE" = "128" ] && [ -s /tmp/gpt ]; then
-    i=0
-    while [ "$i" -lt "$NENTRIES" ]; do
-        $B dd if=/tmp/gpt bs=1 skip=$(( i * 128 )) count=128 of=/tmp/e 2>/dev/null
-        # An unused slot is all zero. Check the type GUID's first four bytes,
-        # which is cheaper than comparing all 128.
-        if [ "$($B od -An -tx1 -N4 /tmp/e | $B tr -d ' \n')" != "00000000" ]; then
-            name=$($B dd if=/tmp/e bs=1 skip=56 count=72 2>/dev/null | \
-                   $B tr -d '\000' | $B cut -c1-36)
-            first=$(le /tmp/e 32 8)
-            last=$(le /tmp/e 40 8)
-            type=$($B od -An -tx1 -N16 /tmp/e | $B tr -d ' \n')
-            say ""
-            say "  [$(printf '%2d' "$i")] ${name:-<unnamed>}"
-            say "       LBA $first .. $last    $(( (last - first + 1) * SECSIZE / 1024 )) MB"
-            say "       type $type"
-        fi
-        i=$(( i + 1 ))
-    done
-else
-    say "  no GPT to read, see the previous page"
-fi
-
-pause
-
-# ---------------------------------------------------------------------- page 5
-
-head1 "LOOKING FOR userdata"
-
-# Found by name in the GPT listing, not through /dev/block/by-name: those
-# symlinks are made by Android's ueventd, and a bare ramdisk has none.
-say ""
+blank
+r "=== IS /data READABLE? ==="
+# By name in the GPT, not through /dev/block/by-name: those symlinks come from
+# Android's ueventd and a bare ramdisk has none.
 FOUND=""
 if [ "$ENTSIZE" = "128" ] && [ -s /tmp/gpt ]; then
     i=0
     while [ "$i" -lt "$NENTRIES" ]; do
         $B dd if=/tmp/gpt bs=1 skip=$(( i * 128 )) count=128 of=/tmp/e 2>/dev/null
         nm=$($B dd if=/tmp/e bs=1 skip=56 count=72 2>/dev/null | $B tr -d '\000' | $B cut -c1-36)
-        if [ "$nm" = "userdata" ]; then
-            say "  userdata is entry $i"
-            FOUND=$(( i + 1 ))
-            break
-        fi
+        [ "$nm" = "userdata" ] && { FOUND=$(( i + 1 )); break; }
         i=$(( i + 1 ))
     done
 fi
 
-if [ -z "$FOUND" ]; then
-    say "  no partition named userdata"
-else
-    PART="/dev/block/$(basename "$DISK")$FOUND"
-    say "  device is $PART"
-    [ -e "$PART" ] && say "  it exists" || say "  IT DOES NOT EXIST IN /dev"
-    say ""
-    say "  trying read-only mounts:"
+READABLE=no
+if [ -n "$FOUND" ]; then
+    PART="$DISK$FOUND"
+    r "userdata is entry $FOUND, device $PART"
+    [ -e "$PART" ] && r "  it exists in /dev" || r "  MISSING from /dev"
     for fs in ext4 f2fs vfat; do
         if $B mount -t "$fs" -o ro "$PART" /mnt 2>/dev/null; then
-            say ""
-            say "  >>> mounted as $fs <<<"
-            $B ls /mnt | $B head -25
-            if [ -d /mnt/media/0 ]; then
-                say ""
-                say "  /sdcard contents:"
-                $B ls /mnt/media/0 | $B head -30
-            fi
+            r "  >>> mounted as $fs <<<"
+            $B ls /mnt >&3 2>/dev/null
+            [ -d /mnt/media/0 ] && { r "  /sdcard:"; $B ls /mnt/media/0 >&3 2>/dev/null; }
             $B umount /mnt 2>/dev/null
-            say ""
-            say "  >>> /data IS READABLE <<<"
+            READABLE=yes
             break
-        else
-            say "    $fs : no"
         fi
+        r "  $fs: no"
     done
+else
+    r "no partition named userdata"
+fi
+r ""
+r "RESULT: /data readable = $READABLE"
+buzz 3
+[ "$READABLE" = "yes" ] || buzz 1
+
+# ---------------------------------------------------------------- output over USB
+
+blank
+r "=== USB ==="
+UDC=""
+for u in /sys/class/udc/*; do
+    [ -e "$u" ] && { UDC=$(basename "$u"); break; }
+done
+r "udc: ${UDC:-none}"
+r "configfs: $([ -d /sys/kernel/config/usb_gadget ] && echo present || echo absent)"
+
+MADE=""
+if [ -n "$UDC" ]; then
+    $B mount -t configfs none /sys/kernel/config 2>/dev/null
+    G=/sys/kernel/config/usb_gadget
+    if [ -d "$G" ] || $B mkdir -p "$G/ub" 2>/dev/null; then
+        cd "$G/ub" || cd /tmp
+        $B mkdir -p strings/0x409 configs/c.1/strings/0x409 2>/dev/null
+        echo 0x18d1 > idVendor 2>/dev/null
+        echo 0x4ee7 > idProduct 2>/dev/null
+        echo "prep" > strings/0x409/serialnumber 2>/dev/null
+        echo "prep" > strings/0x409/manufacturer 2>/dev/null
+        echo "prep" > strings/0x409/product 2>/dev/null
+        echo "prep" > configs/c.1/strings/0x409/configuration 2>/dev/null
+
+        # Which of these the kernel actually has is not knowable from here, so
+        # try them in order of how much they give us: a network one first, a
+        # serial one last.
+        for fn in ecm.usb0 ncm.usb0 rndis.usb0 acm.usb0 ffs.usb0; do
+            $B mkdir -p "functions/$fn" 2>/dev/null || continue
+            r "  function $fn available"
+            if [ "$fn" = "rndis.usb0" ]; then
+                echo RNDIS > "functions/$fn/rmnet_type" 2>/dev/null
+            fi
+            $B ln -s "functions/$fn" configs/c.1/ 2>/dev/null
+            MADE="$fn"
+            break
+        done
+
+        if [ -n "$MADE" ]; then
+            echo "$UDC" > UDC 2>/dev/null
+            r "  bound $MADE to $UDC"
+            buzz 2
+        fi
+    fi
 fi
 
-pause
+if [ "$MADE" != "acm.usb0" ]; then
+    NIC=""
+    for nic in usb0 eth0 en0 rndis0; do
+        [ -e "/sys/class/net/$nic" ] && { NIC="$nic"; break; }
+    done
+    r "  interface: ${NIC:-none}"
+    if [ -n "$NIC" ]; then
+        # Address the phone fixed, and hand one out to the PC. Doing both sides
+        # with static addresses would need manual configuration of the adapter
+        # on Windows, which is one more thing to get wrong.
+        $B ifconfig "$NIC" 192.168.42.1 netmask 255.255.255.0 up 2>/dev/null
+        cat > /tmp/udhcpd.conf <<EOF
+start 192.168.42.100
+end   192.168.42.200
+lease_time 86400
+script /udhcpc.script
+EOF
+        $B udhcpd -f -r -l /tmp/leases.txt -p 0 /tmp/udhcpd.conf 2>/dev/null &
+        $B sleep 3
+        r "  phone is at 192.168.42.1"
+        r "  the PC gets 192.168.42.100-200, report at:"
+        r "    http://192.168.42.1:8080/report.txt"
+        buzz 4
+    fi
+    cp "$REPORT" /www/report.txt
+    $B httpd -f -p 8080 -h /www
+fi
 
-# ---------------------------------------------------------------------- page 6
+blank
+r ""
+r "end of report. hold power ~15 s to leave."
+r ""
 
-head1 "WHAT THIS MEANS"
-
-say ""
-say "  /data IS READABLE"
-say "    the installer can be copied off the phone"
-say "    by root, no root on Android needed."
-say ""
-say "  every mount failed"
-say "    /data is most likely encrypted. Android 11"
-say "    and later do that by default, with the keys"
-say "    in the phone's secure element, so there is"
-say "    no way in from a ramdisk."
-say ""
-say "  Nothing on the phone was changed."
-say ""
-say "  To exit: hold power until it turns off, then"
-say "  hold power + volume down for fastboot."
-say ""
-say "########################################"
-say "#########    END OF REPORT     ######"
-say "########################################"
-
-# Stay alive so the pages can be photographed. Rebooting on our own would drop
-# the user back into fastboot with no warning, which is not a thing to do to
-# someone's phone unannounced.
+# Stay up so the PC can read it. Rebooting on our own would drop the user back
+# into fastboot unannounced, which is not a thing to do to someone's phone.
 while true; do
     $B sleep 60
 done

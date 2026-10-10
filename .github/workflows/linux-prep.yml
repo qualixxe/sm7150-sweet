@@ -95,6 +95,11 @@ jobs:
 
           install -m 0755 linux-prep/init "$ROOTFS/init"
 
+          # udhcpc and udhcpd both abort unless a lease script exists at a path
+          # they expect, and that path ships with the udhcpc package rather than
+          # with busybox. It is shipped here instead.
+          install -m 0755 linux-prep/udhcpc.script "$ROOTFS/udhcpc.script"
+
           echo "=== rootfs ==="
           ls -la "$ROOTFS" "$ROOTFS/bin"
           du -sh "$ROOTFS"
