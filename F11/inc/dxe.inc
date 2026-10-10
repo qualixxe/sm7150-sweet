@@ -48,9 +48,25 @@
   }
 
 # --- UFSDxe (ATIVO, base) ---
+  # sm7325, not sm7150. The driver repository ships one UFSDxe per SoC and they
+  # differ substantially:
+  #
+  #   sm7150/UFSDxe.efi    761 856 bytes   depex 1 protocol
+  #   sm7325/UFSDxe.efi    126 976 bytes   depex 2 protocols
+  #   sm8150/UFSDxe.efi    126 976 bytes
+  #
+  # sm7150 is a six-times-larger build with a third of the dependencies, written
+  # against a different memory layout. With it loaded the driver does not come
+  # up: the File Manager then lists only LOGFS, bluetooth and VenHw, no
+  # userdata, so nothing can be written to the phone and Windows cannot be
+  # installed.
+  #
+  # sm7325 is the variant for this SoC. Its two extra depex protocols,
+  # 02F6F0A3-134A-26F0-3EF2-E0DEC512342F and 3402D0C7-E5F4-39D2-CB47-AACD7F66EF76,
+  # were verified present in the built firmware (30 and 1 references).
   FILE DRIVER = 0d35cd8e-97ea-4f9a-96af-0f0d89f76567 {
-    SECTION DXE_DEPEX = Dxe/EFI_Binaries/Drivers/sm7150/UFSDxe/UFSDxe.depex
-    SECTION PE32 = Dxe/EFI_Binaries/Drivers/sm7150/UFSDxe/UFSDxe.efi
+    SECTION DXE_DEPEX = Dxe/EFI_Binaries/Drivers/sm7325/UFSDxe/UFSDxe.depex
+    SECTION PE32 = Dxe/EFI_Binaries/Drivers/sm7325/UFSDxe/UFSDxe.efi
     SECTION UI = "UFSDxe"
   }
 
