@@ -11,18 +11,19 @@
 # There is no framebuffer console to print to. The device tree has no
 # simple-framebuffer node and the panel is driven by the Qualcomm display
 # controller, which nothing in a ramdisk starts, so console=tty0 produces
-# nothing at all. The report is therefore handed over USB: whichever gadget
-# function the kernel has is bound, the phone takes 192.168.42.1, hands the PC an
-# address, and serves the text over HTTP.
+# nothing. The report is handed over USB instead.
 #
-# Nothing here touches the vibration motor. The previous version buzzed once at
-# startup and the phone rebooted about ten seconds later. The device tree marks
-# the vibrator node qcom,vib-ldo-volt-uv, an under-voltage flag, so driving the
-# LDO from a cold boot may well be what tripped the reset. The cost of guessing
-# wrong was a whole boot cycle, so the motor is left alone.
+# The ordering below is deliberate. USB comes up first and the analysis runs
+# afterwards, because the phone resets itself a few seconds after userspace
+# starts and there is no second chance. A half-written report is still worth
+# fetching; no channel at all is worth nothing.
 #
-# Everything here is read-only. No partition is written, no filesystem is
-# modified, every mount is -o ro.
+# PID 1 never exits. When init dies the kernel panics and the phone reboots,
+# which is the single most likely reason every earlier attempt came back to
+# fastboot after ten seconds. The loop at the end is not optional.
+#
+# Nothing here touches hardware: no vibration, no LEDs, no writes to any
+# partition, every mount -o ro.
 
 PATH=/bin:/sbin:/usr/sbin:/usr/bin
 export PATH
@@ -30,7 +31,9 @@ export PATH
 B=/bin/busybox
 
 REPORT=/tmp/report.txt
-$B mkdir -p /proc /sys /dev /tmp /mnt /www
+WWW=/www
+
+$B mkdir -p /proc /sys /dev /tmp /mnt "$WWW"
 $B mount -t proc     proc     /proc
 $B mount -t sysfs    sysfs    /sys
 $B mount -t devtmpfs devtmpfs /dev 2>/dev/null
@@ -38,6 +41,88 @@ $B mount -t devtmpfs devtmpfs /dev 2>/dev/null
 exec 3>"$REPORT"
 
 r()  { echo "$*" >&3; echo "$*"; }
+
+# ---------------------------------------------------------------- watchdog
+
+# The phone resets itself with the stock Android ramdisk too, so a watchdog left
+# armed by the bootloader is a real possibility. Disable what can be disabled,
+# and pet it regardless in case it can only be fed.
+for wd in /sys/class/watchdog/*; do
+    [ -e "$wd" ] || continue
+    echo 0 > "$wd/timeout" 2>/dev/null
+done
+for dev in /dev/watchdog /dev/watchdog0; do
+    [ -e "$dev" ] && { echo V > "$dev" 2>/dev/null; echo 1 > "$dev" 2>/dev/null; }
+done
+(
+    while true; do
+        for dev in /dev/watchdog /dev/watchdog0; do
+            [ -e "$dev" ] && echo 1 > "$dev" 2>/dev/null
+        done
+        $B sleep 5
+    done
+) &
+
+# ---------------------------------------------------------------- USB first
+
+cp "$REPORT" "$WWW/report.txt" 2>/dev/null
+
+UDC=""
+for u in /sys/class/udc/*; do
+    [ -e "$u" ] && { UDC=$(basename "$u"); break; }
+done
+
+MADE=""
+if [ -n "$UDC" ]; then
+    $B mount -t configfs none /sys/kernel/config 2>/dev/null
+    if $B mkdir -p /sys/kernel/config/usb_gadget/ub 2>/dev/null; then
+        cd /sys/kernel/config/usb_gadget/ub || cd /tmp
+        $B mkdir -p strings/0x409 configs/c.1/strings/0x409 2>/dev/null
+        echo 0x18d1 > idVendor 2>/dev/null
+        echo 0x4ee7 > idProduct 2>/dev/null
+        echo "prep" > strings/0x409/serialnumber 2>/dev/null
+        echo "prep" > strings/0x409/manufacturer 2>/dev/null
+        echo "prep" > strings/0x409/product 2>/dev/null
+        echo "prep" > configs/c.1/strings/0x409/configuration 2>/dev/null
+
+        # Which of these the kernel actually has is not knowable from here, so
+        # try each in turn and take the first that appears. A network function is
+        # worth more than a serial one, but a serial one is better than nothing:
+        # Windows shows it as a COM port and the report can be read there.
+        for fn in ecm.usb0 ncm.usb0 rndis.usb0 acm.usb0 ffs.usb0; do
+            $B mkdir -p "functions/$fn" 2>/dev/null || continue
+            [ "$fn" = "rndis.usb0" ] && echo RNDIS > "functions/$fn/rmnet_type" 2>/dev/null
+            $B ln -s "functions/$fn" configs/c.1/ 2>/dev/null
+            MADE="$fn"
+            break
+        done
+        [ -n "$MADE" ] && echo "$UDC" > UDC 2>/dev/null
+    fi
+fi
+
+# httpd in the background. If it fails, or the applet is missing, that must not
+# take PID 1 down with it.
+if [ "$MADE" != "acm.usb0" ]; then
+    $B httpd -p 8080 -h "$WWW" &
+    $B sleep 1
+
+    NIC=""
+    for nic in usb0 eth0 en0 rndis0; do
+        [ -e "/sys/class/net/$nic" ] && { NIC="$nic"; break; }
+    done
+    if [ -n "$NIC" ]; then
+        $B ifconfig "$NIC" 192.168.42.1 netmask 255.255.255.0 up 2>/dev/null
+        cat > /tmp/udhcpd.conf <<EOF
+start 192.168.42.100
+end   192.168.42.200
+lease_time 86400
+script /udhcpc.script
+EOF
+        $B udhcpd -f -r -l /tmp/leases.txt /tmp/udhcpd.conf &
+    fi
+fi
+
+# ---------------------------------------------------------------- analysis
 
 DISK=""
 SECSIZE=512
@@ -58,53 +143,16 @@ le() {
     echo $v
 }
 
-# ---------------------------------------------------------------- watchdog
-
-# The phone reboots on its own a few seconds after userspace starts, with the
-# stock Android ramdisk as well as with this one. That points at a watchdog left
-# armed by the bootloader rather than at anything in the ramdisk.
-#
-# Disable every watchdog the kernel exposes. Writing V to /dev/watchdog is the
-# Linux way to disarm one that is marked as not nowayout, and closing the file
-# without writing V would make the kernel stop it. Both are attempted, and a
-# background pet loop runs regardless, in case a watchdog can be fed but not
-# turned off.
-watchdog_off() {
-    for wd in /sys/class/watchdog/*; do
-        [ -e "$wd" ] || continue
-        echo "  watchdog $(basename "$wd") identity=$(cat "$wd/identity" 2>/dev/null)" >&3
-        echo 0 > "$wd/timeout" 2>/dev/null
-    done
-    for dev in /dev/watchdog /dev/watchdog0; do
-        [ -e "$dev" ] || continue
-        echo V > "$dev" 2>/dev/null && echo "  disarmed $dev" >&3
-        echo 1 > "$dev" 2>/dev/null
-    done
-}
-watchdog_off
-
-pet_loop() {
-    while true; do
-        for dev in /dev/watchdog /dev/watchdog0; do
-            [ -e "$dev" ] && echo 1 > "$dev" 2>/dev/null
-        done
-        $B sleep 5
-    done
-}
-pet_loop &
-
-# ---------------------------------------------------------------- report
-
-r "########################################"
-r "########   COURBET LINUX PREP v3   #####"
-r "########################################"
 r ""
-r "cmdline: $($B cat /proc/cmdline)"
-r "kernel : $($B uname -a)"
+r "########   COURBET LINUX PREP v4   ########"
+r ""
+r "channel : ${MADE:-none} on ${UDC:-no-udc}"
+r "cmdline : $($B cat /proc/cmdline)"
+r "kernel  : $($B uname -a)"
 r "config.gz readable: $([ -r /proc/config.gz ] && echo yes || echo no)"
-r "watchdog nodes: $(ls /sys/class/watchdog 2>/dev/null | tr '\n' ' ')"
-r "usb configfs: $([ -d /sys/kernel/config/usb_gadget ] && echo present || echo absent)"
-r "udc: $(ls /sys/class/udc 2>/dev/null | tr '\n' ' ')"
+r "watchdog: $(ls /sys/class/watchdog 2>/dev/null | tr '\n' ' ')"
+r "configfs: $([ -d /sys/kernel/config/usb_gadget ] && echo present || echo absent)"
+r "net ifaces: $(ls /sys/class/net 2>/dev/null | tr '\n' ' ')"
 r ""
 
 r "=== BLOCK DEVICES ==="
@@ -200,82 +248,26 @@ else
 fi
 r ""
 r "RESULT: /data readable = $READABLE"
-
-# ---------------------------------------------------------------- USB output
-
 r ""
-r "=== USB ==="
-UDC=""
-for u in /sys/class/udc/*; do
-    [ -e "$u" ] && { UDC=$(basename "$u"); break; }
-done
-r "udc: ${UDC:-none}"
-r ""
+r "end of report. PID 1 stays alive from here."
 
-if [ -n "$UDC" ]; then
-    $B mount -t configfs none /sys/kernel/config 2>/dev/null
-    G=/sys/kernel/config/usb_gadget
-    if $B mkdir -p "$G/ub" 2>/dev/null; then
-        cd "$G/ub" || cd /tmp
-        $B mkdir -p strings/0x409 configs/c.1/strings/0x409 2>/dev/null
-        echo 0x18d1 > idVendor 2>/dev/null
-        echo 0x4ee7 > idProduct 2>/dev/null
-        echo "prep" > strings/0x409/serialnumber 2>/dev/null
-        echo "prep" > strings/0x409/manufacturer 2>/dev/null
-        echo "prep" > strings/0x409/product 2>/dev/null
-        echo "prep" > configs/c.1/strings/0x409/configuration 2>/dev/null
+cp "$REPORT" "$WWW/report.txt" 2>/dev/null
 
-        MADE=""
-        for fn in ecm.usb0 ncm.usb0 rndis.usb0 acm.usb0 ffs.usb0; do
-            $B mkdir -p "functions/$fn" 2>/dev/null || continue
-            r "  function $fn is available"
-            [ "$fn" = "rndis.usb0" ] && echo RNDIS > "functions/$fn/rmnet_type" 2>/dev/null
-            $B ln -s "functions/$fn" configs/c.1/ 2>/dev/null
-            MADE="$fn"
-            break
-        done
-
-        if [ -n "$MADE" ]; then
-            echo "$UDC" > UDC 2>/dev/null
-            r "  bound $MADE to $UDC"
-        else
-            r "  no gadget function could be created"
-        fi
-    else
-        r "  usb_gadget could not be created"
-    fi
-else
-    r "  no UDC present, cannot present as a USB device"
-fi
-
-if [ "$MADE" != "acm.usb0" ]; then
-    NIC=""
-    for nic in usb0 eth0 en0 rndis0; do
-        [ -e "/sys/class/net/$nic" ] && { NIC="$nic"; break; }
-    done
-    r "  interface: ${NIC:-none}"
-    if [ -n "$NIC" ]; then
-        $B ifconfig "$NIC" 192.168.42.1 netmask 255.255.255.0 up 2>/dev/null
-        cat > /tmp/udhcpd.conf <<EOF
-start 192.168.42.100
-end   192.168.42.200
-lease_time 86400
-script /udhcpc.script
-EOF
-        $B udhcpd -f -r -l /tmp/leases.txt /tmp/udhcpd.conf 2>/dev/null &
-        $B sleep 3
-        r "  phone at 192.168.42.1, report at http://192.168.42.1:8080/report.txt"
-    fi
-fi
-
-cp "$REPORT" /www/report.txt
-r ""
-r "end of report."
-
-# httpd last, so it serves the file that was just written, and stays in the
-# foreground: it is the only thing keeping this alive that is doing work.
+# If the only gadget function available was a serial one, the PC is watching a
+# COM port instead of a browser. Keep feeding it.
 if [ "$MADE" = "acm.usb0" ]; then
-    $B sleep 3600
-else
-    $B httpd -f -p 8080 -h /www
+    (
+        while true; do
+            for tty in /dev/ttyACM0 /dev/ttyGS0; do
+                [ -e "$tty" ] && { cat "$REPORT" > "$tty" 2>/dev/null; break; }
+            done
+            $B sleep 5
+        done
+    ) &
 fi
+
+# Never reached, on purpose. PID 1 exiting panics the kernel and reboots the
+# phone, which is what every previous attempt did after about ten seconds.
+while true; do
+    $B sleep 60
+done
