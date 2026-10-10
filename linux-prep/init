@@ -1,55 +1,66 @@
 #!/bin/sh
 # Runs as PID 1 from a ramdisk of our own, with the phone's stock kernel.
 #
-# Why this exists: the UEFI firmware can only mount FAT32, and this phone's
-# partitions are ext4 and f2fs. Even a perfectly working UFS controller would give
-# the File Manager nothing to show, so storage cannot be judged from there. This
-# boots the phone's own kernel instead and looks at the block devices directly,
-# which is where the answer actually is.
+# Why this exists: the UEFI firmware ships one filesystem driver, Fat, and this
+# phone's partitions are ext4 and f2fs. Even a fully working UFS controller would
+# give the File Manager nothing to mount, so storage cannot be judged from there.
+# This boots the phone's own kernel instead and reads the block devices directly.
 #
-# It is loaded with `fastboot boot`, so nothing is written to flash. It prints to
-# the framebuffer console, one page at a time with pauses, because there is no
+# It is loaded with `fastboot boot`, so nothing is written to flash. Output goes
+# to the framebuffer console, one page at a time with pauses, because there is no
 # UART and a photograph is the only way to read the screen.
 #
-# Everything it does is read-only on purpose. No partition is written, no
-# filesystem is modified, and every mount is read-only, so a mistake here cannot
-# cost the user anything.
+# Everything here is read-only. No partition is written, no filesystem is
+# modified, and every mount is -o ro, so a mistake cannot cost anything.
 
-PATH=/bin:/sbin:/usr/bin:/usr/sbin
+PATH=/bin:/sbin:/usr/sbin:/usr/bin
 export PATH
 
-/bin/busybox mkdir -p /proc /sys /dev /tmp /mnt
-/bin/busybox mount -t proc     proc     /proc
-/bin/busybox mount -t sysfs    sysfs    /sys
-/bin/busybox mount -t devtmpfs devtmpfs /dev 2>/dev/null
+B=/bin/busybox
 
-# ---------------------------------------------------------------- page helper
+$B mkdir -p /proc /sys /dev /tmp /mnt
+$B mount -t proc     proc     /proc
+$B mount -t sysfs    sysfs    /sys
+$B mount -t devtmpfs devtmpfs /dev 2>/dev/null
 
-PAGE=1
+DISK=""
+SECSIZE=512
+ENTRY_LBA=0
+NENTRIES=0
+ENTSIZE=0
 
-say() {
-    /bin/busybox echo "$*"
-}
-
-# Print a heading that survives being photographed at 640x400.
+say()  { $B echo "$*"; }
 head1() {
     say ""
     say "========================================"
     say "$*"
     say "========================================"
 }
-
-# A blank run of seconds is unreadable, so pages are separated by a visible
-# marker and a long pause.
 pause() {
     say ""
-    say "--- page $PAGE ends, next in 20s ---"
-    /bin/busybox sleep 20
+    say "--- page $PAGE done, next in 20s ---"
+    $B sleep 20
     say ""
     say "########################################"
     say "#########  PAGE $((PAGE + 1))  #########"
     say "########################################"
     PAGE=$((PAGE + 1))
+}
+PAGE=1
+
+# Read a little-endian unsigned integer of 1, 2, 4 or 8 bytes from a file.
+#
+# busybox od has no reliable -w in every build, so each byte is pulled separately
+# and folded here. $1 file, $2 offset, $3 width in bytes.
+le() {
+    set -- $($B od -An -tx1 -j "$2" -N "$3" "$1")
+    v=0
+    i=0
+    for byte in "$@"; do
+        v=$(( v + 0x$byte * (1 << (8 * i)) ))
+        i=$(( i + 1 ))
+    done
+    echo $v
 }
 
 # ---------------------------------------------------------------------- page 1
@@ -58,14 +69,14 @@ say "########################################"
 say "########   COURBET LINUX PREP v1   #####"
 say "########################################"
 say ""
-say "this is the phone's own kernel with our"
-say "ramdisk. nothing has been written."
+say "phone's own kernel, our ramdisk."
+say "nothing was written to the phone."
 say ""
 say "cmdline:"
-/bin/busybox cat /proc/cmdline
+$B cat /proc/cmdline
 say ""
 say "kernel:"
-/bin/busybox uname -a
+$B uname -a
 
 pause
 
@@ -73,63 +84,72 @@ pause
 
 head1 "BLOCK DEVICES"
 
-if [ -d /sys/class/block ]; then
-    for d in /sys/class/block/*; do
-        [ -e "$d" ] || continue
-        name=/bin/busybox basename "$d"
-        # The device mapper and loop devices are noise here.
-        case "$name" in
-            dm-*|loop*|ram*|zram*|md*|nbd*) continue ;;
-        esac
-        sectors=/bin/busybox cat "$d/size" 2>/dev/null
-        [ -n "$sectors" ] || continue
-        mb=$((sectors / 2048))
-        dev=/dev/block/$name
-        [ -e "$dev" ] || dev=""
-        say ""
-        say "$name   ${mb} MB   $dev"
-        if [ -n "$dev" ]; then
-            ro=$(/bin/busybox blkid "$dev" 2>/dev/null)
-            [ -n "$ro" ] && say "   type: $ro"
-        fi
-    done
-else
-    say "/sys/class/block is missing - the kernel did not"
-    say "register any block device."
-fi
+for d in /sys/class/block/*; do
+    [ -e "$d" ] || continue
+    name=$($B basename "$d")
+    case "$name" in
+        dm-*|loop*|ram*|zram*|md*|nbd*) continue ;;
+    esac
+    sectors=$($B cat "$d/size" 2>/dev/null)
+    case "$sectors" in
+        ''|*[!0-9]*) continue ;;
+    esac
+    [ "$sectors" -gt 0 ] || continue
+    say ""
+    say "  $name   $((sectors / 2048)) MB   /dev/block/$name"
+done
 
 pause
 
 # ---------------------------------------------------------------------- page 3
 
-head1 "PARTITION TABLE"
-
-# Read the MBR partition entries directly rather than trusting a tool: the
-# offsets are fixed and this cannot go wrong if the disk is absent.
-UFS=/dev/block/sda
-[ -e "$UFS" ] || UFS=/dev/block/mmcblk0
-[ -e "$UFS" ] || UFS=/dev/block/sdb
+head1 "PARTITION TABLE (GPT)"
 
 say ""
-if [ ! -e "$UFS" ]; then
-    say "no candidate block device found"
-else
-    say "reading $UFS"
-    say ""
-    say "MBR signature word at 0x1b8:"
-    /bin/busybox od -An -tx1 -j 440 -N 2 "$UFS" 2>/dev/null
-
-    /bin/busybox dd if="$UFS" bs=1 skip=446 count=64 2>/dev/null > /tmp/mbr
-    if [ -s /tmp/mbr ]; then
-        say ""
-        say "MBR partition entries, 4 x 16 bytes at 0x1be:"
-        n=1
-        while [ $n -le 4 ]; do
-            off=$(( (n - 1) * 16 ))
-            /bin/busybox dd if=/tmp/mbr bs=1 skip=$off count=16 2>/dev/null | \
-                /bin/busybox od -An -tx1
-            n=$((n + 1))
+say "looking for a whole disk..."
+for cand in sda sdb mmcblk0 mmcblk1 nvme0n1; do
+    if [ -e "/dev/block/$cand" ]; then
+        parts=$(ls /sys/class/block/"$cand"/ 2>/dev/null | grep -c '' || true)
+        has_child=0
+        for p in /sys/class/block/"$cand"/*; do
+            [ -e "$p" ] && has_child=1 && break
         done
+        if [ "$has_child" = "0" ]; then
+            DISK=/dev/block/$cand
+            break
+        fi
+    fi
+done
+
+if [ -z "$DISK" ]; then
+    say "  no whole-disk device found"
+else
+    say "  disk is $DISK"
+    # LBA 0 and the GPT header live in the first three sectors.
+    $B dd if="$DISK" bs=512 count=3 2>/dev/null > /tmp/gpthdr
+
+    sig=$($B dd if=/tmp/gpthdr bs=1 skip=512 count=8 2>/dev/null | $B tr -d '\000')
+    say ""
+    say "  LBA0 MBR signature : $($B od -An -tx1 -j 440 -N 2 /tmp/gpthdr | $B tr -d ' \n')"
+    say "  GPT signature      : '${sig}'  (expect EFI PART)"
+
+    if [ "$sig" = "EFI PART" ]; then
+        SECSIZE=$(le /tmp/gpthdr 536 4)
+        ENTRY_LBA=$(le /tmp/gpthdr 584 8)
+        NENTRIES=$(le /tmp/gpthdr 592 4)
+        ENTSIZE=$(le /tmp/gpthdr 596 4)
+        LAST_USABLE=$(le /tmp/gpthdr 640 8)
+        say ""
+        say "  sector size        : $SECSIZE"
+        say "  entry table at LBA : $ENTRY_LBA"
+        say "  entries            : $NENTRIES x $ENTSIZE bytes"
+        say "  last usable LBA    : $LAST_USABLE"
+        say "  disk capacity      : $(( (LAST_USABLE + 1) * SECSIZE / 1024 / 1024 )) MB"
+        say ""
+        say "  reading the entry table in one pass..."
+        $B dd if="$DISK" bs=512 skip="$ENTRY_LBA" \
+             count=$(( (NENTRIES * ENTSIZE + 511) / 512 )) 2>/dev/null > /tmp/gpt
+        say "  read $((NENTRIES * ENTSIZE)) bytes into /tmp/gpt"
     fi
 fi
 
@@ -137,90 +157,112 @@ pause
 
 # ---------------------------------------------------------------------- page 4
 
-head1 "GPT"
+head1 "GPT PARTITIONS"
 
-if [ -e "$UFS" ]; then
-    /bin/busybox dd if="$UFS" bs=1 skip=512 count=512 2>/dev/null > /tmp/gpthdr
-    if [ -s /tmp/gpthdr ]; then
-        say ""
-        say "primary GPT header signature (expect 'EFI PART'):"
-        /bin/busybox dd if=/tmp/gpthdr bs=1 skip=0 count=8 2>/dev/null | \
-            /bin/busybox od -An -c
-        say ""
-        say "first 8 partition entries (128 bytes each):"
-        /bin/busybox dd if="$UFS" bs=1 skip=$((512 + 92)) count=1024 2>/dev/null | \
-            /bin/busybox od -An -tx1 | /bin/busybox head -40
-    fi
+if [ -n "$DISK" ] && [ "$ENTSIZE" = "128" ] && [ -s /tmp/gpt ]; then
+    i=0
+    while [ "$i" -lt "$NENTRIES" ]; do
+        $B dd if=/tmp/gpt bs=1 skip=$(( i * 128 )) count=128 of=/tmp/e 2>/dev/null
+        # An unused slot is all zero. Check the type GUID's first four bytes,
+        # which is cheaper than comparing all 128.
+        if [ "$($B od -An -tx1 -N4 /tmp/e | $B tr -d ' \n')" != "00000000" ]; then
+            name=$($B dd if=/tmp/e bs=1 skip=56 count=72 2>/dev/null | \
+                   $B tr -d '\000' | $B cut -c1-36)
+            first=$(le /tmp/e 32 8)
+            last=$(le /tmp/e 40 8)
+            type=$($B od -An -tx1 -N16 /tmp/e | $B tr -d ' \n')
+            say ""
+            say "  [$(printf '%2d' "$i")] ${name:-<unnamed>}"
+            say "       LBA $first .. $last    $(( (last - first + 1) * SECSIZE / 1024 )) MB"
+            say "       type $type"
+        fi
+        i=$(( i + 1 ))
+    done
 else
-    say "no block device"
+    say "  no GPT to read, see the previous page"
 fi
 
 pause
 
 # ---------------------------------------------------------------------- page 5
 
-head1 "WHERE THE WINDOWS FILES WOULD BE"
+head1 "LOOKING FOR userdata"
 
-# If the installer has been pushed to /sdcard it lives on userdata, which is
-# ext4. Mounting it read-only is safe: no journal is replayed and nothing is
-# written, so this cannot damage the partition.
+# Found by name in the GPT listing, not through /dev/block/by-name: those
+# symlinks are made by Android's ueventd, and a bare ramdisk has none.
 say ""
-say "looking for userdata..."
-
-UD=""
-for cand in userdata userdata_a userdata_b; do
-    [ -e "/dev/block/by-name/$cand" ] && { UD="/dev/block/by-name/$cand"; break; }
-done
-
-if [ -z "$UD" ]; then
-    say "no /dev/block/by-name/userdata"
-else
-    say "userdata is $UD"
-    if /bin/busybox mount -t ext4 -o ro "$UD" /mnt 2>/dev/null; then
-        say "mounted read-only"
-        say ""
-        say "top level:"
-        /bin/busybox ls /mnt | /bin/busybox head -30
-        say ""
-        if [ -d /mnt/sdcard ]; then
-            say "contents of /sdcard:"
-            /bin/busybox ls /mnt/sdcard | /bin/busybox head -40
-            say ""
-            if [ -d /mnt/sdcard/Win ]; then
-                say "Windows installer files found:"
-                /bin/busybox ls -l /mnt/sdcard/Win | /bin/busybox head -40
-            else
-                say "no /sdcard/Win directory yet"
-            fi
-        else
-            say "no /sdcard directory in this partition"
+FOUND=""
+if [ "$ENTSIZE" = "128" ] && [ -s /tmp/gpt ]; then
+    i=0
+    while [ "$i" -lt "$NENTRIES" ]; do
+        $B dd if=/tmp/gpt bs=1 skip=$(( i * 128 )) count=128 of=/tmp/e 2>/dev/null
+        nm=$($B dd if=/tmp/e bs=1 skip=56 count=72 2>/dev/null | $B tr -d '\000' | $B cut -c1-36)
+        if [ "$nm" = "userdata" ]; then
+            say "  userdata is entry $i"
+            FOUND=$(( i + 1 ))
+            break
         fi
-        /bin/busybox umount /mnt 2>/dev/null
-    else
-        say "could not mount $UD read-only"
-    fi
+        i=$(( i + 1 ))
+    done
+fi
+
+if [ -z "$FOUND" ]; then
+    say "  no partition named userdata"
+else
+    PART="/dev/block/$(basename "$DISK")$FOUND"
+    say "  device is $PART"
+    [ -e "$PART" ] && say "  it exists" || say "  IT DOES NOT EXIST IN /dev"
+    say ""
+    say "  trying read-only mounts:"
+    for fs in ext4 f2fs vfat; do
+        if $B mount -t "$fs" -o ro "$PART" /mnt 2>/dev/null; then
+            say ""
+            say "  >>> mounted as $fs <<<"
+            $B ls /mnt | $B head -25
+            if [ -d /mnt/media/0 ]; then
+                say ""
+                say "  /sdcard contents:"
+                $B ls /mnt/media/0 | $B head -30
+            fi
+            $B umount /mnt 2>/dev/null
+            say ""
+            say "  >>> /data IS READABLE <<<"
+            break
+        else
+            say "    $fs : no"
+        fi
+    done
 fi
 
 pause
 
 # ---------------------------------------------------------------------- page 6
 
-head1 "SUMMARY"
+head1 "WHAT THIS MEANS"
 
 say ""
-say "This run changed nothing on the phone."
+say "  /data IS READABLE"
+say "    the installer can be copied off the phone"
+say "    by root, no root on Android needed."
 say ""
-say "To end: hold power until it turns off,"
-say "then hold power + volume down for fastboot."
-
+say "  every mount failed"
+say "    /data is most likely encrypted. Android 11"
+say "    and later do that by default, with the keys"
+say "    in the phone's secure element, so there is"
+say "    no way in from a ramdisk."
+say ""
+say "  Nothing on the phone was changed."
+say ""
+say "  To exit: hold power until it turns off, then"
+say "  hold power + volume down for fastboot."
 say ""
 say "########################################"
 say "#########    END OF REPORT     ######"
 say "########################################"
 
 # Stay alive so the pages can be photographed. Rebooting on our own would drop
-# the user straight back into fastboot with no warning, which is not a thing to
-# do to someone's phone.
+# the user back into fastboot with no warning, which is not a thing to do to
+# someone's phone unannounced.
 while true; do
-    /bin/busybox sleep 60
+    $B sleep 60
 done

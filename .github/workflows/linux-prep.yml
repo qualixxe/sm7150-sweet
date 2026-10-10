@@ -32,6 +32,11 @@ jobs:
     timeout-minutes: 60
     permissions:
       contents: write
+    env:
+      # Job level, not per step: every `run:` block is its own shell, so a value
+      # set in one step is simply not there in the next. The first attempt failed
+      # on exactly that, with `VER: unbound variable`.
+      BUSYBOX_VER: 1.36.1
 
     steps:
       - uses: actions/checkout@v4
@@ -45,11 +50,10 @@ jobs:
       - name: Build busybox for arm64
         run: |
           set -euo pipefail
-          VER=1.36.1
           curl -sSL -o busybox.tar.bz2 \
-            "https://busybox.net/downloads/busybox-$VER.tar.bz2"
+            "https://busybox.net/downloads/busybox-$BUSYBOX_VER.tar.bz2"
           tar xjf busybox.tar.bz2
-          cd "busybox-$VER"
+          cd "busybox-$BUSYBOX_VER"
 
           # defconfig already covers sh, mount, ls, cat, dd, od, sleep, blkid,
           # basename and head, which is everything linux-prep/init calls.
@@ -78,7 +82,7 @@ jobs:
           rm -rf "$ROOTFS"
           mkdir -p "$ROOTFS"/{bin,proc,sys,dev,tmp,mnt}
 
-          install -m 0755 busybox-"$VER"/busybox "$ROOTFS/bin/busybox"
+          install -m 0755 "busybox-$BUSYBOX_VER/busybox" "$ROOTFS/bin/busybox"
 
           # Only one symlink is needed. linux-prep/init calls applets as
           # "/bin/busybox <applet>" everywhere, so it does not depend on the
