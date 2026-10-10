@@ -185,3 +185,49 @@ error. Nothing listed beyond the built-in firmware volume means storage really i
 down, and the driver work stands.
 
 This costs nothing: it is the same image already flashed with `fastboot boot`.
+## A second route to the same place, and what it costs
+
+Two facts made the File Manager result worthless: the firmware mounts only FAT32,
+and this phone's partitions are ext4 and f2fs. Those together mean storage cannot
+be observed through UEFI at all, whatever the driver does.
+
+The phone's own kernel does not have that problem. `fastboot boot` runs a full
+Android boot image straight into the kernel, so UEFI is not involved and nothing
+is written to flash. `tools/mk_boot_img.py` rebuilds the stock image with a
+ramdisk of ours; only the ramdisk changes. Verified by round trip: rebuilding the
+stock image with its own ramdisk reproduces every byte up to the AVB footer at
+0x01059000, same sha256. `tools/mk_initramfs.py` packs the cpio.
+
+What this buys: a root shell on the real block device, where `mkfs`, `parted` and
+`mount` all work. That is enough to create the FAT32 partition Windows needs, which
+the UEFI route never could.
+
+### The problem this route does not solve on its own
+
+Where the files come from. The obvious answer is to push the installer to /sdcard
+with adb, which needs no root, and then copy them onto the new FAT32 partition
+from the ramdisk. That answer probably fails:
+
+Android 11 and later enable file-based encryption by default, and the keys live
+in the phone's TEE. Outside Android there is nothing to unlock /data with, so an
+encrypted userdata cannot be mounted read-only either. If that is the case here,
+then /sdcard is unreadable from a ramdisk, and the plan needs a different source
+for the bytes.
+
+Candidates, none of them confirmed:
+
+- `cache` and similar partitions are commonly unencrypted, but the shell user
+  normally cannot write to them, so adb push will not land there.
+- The kernel command line gives the ramdisk about 3 GB (`memsize=3072000`). That
+  is not enough for a 5.5 GB ISO, though it might be enough for an `install.wim`
+  recompressed with LZMS rather than LZX.
+- The firmware has a Mass Storage app that presents a disk image as a USB disk,
+  and USB device mode works on this phone. If UEFI could reach a file we created,
+  the PC could write the installer into it. UEFI only reaches FAT volumes though,
+  and the ones it can see are LOGFS at 4 MiB, bluetooth at 63 MiB and VenHw at
+  319 MiB, which is nowhere near enough.
+
+So the ramdisk route is worth doing first, but mostly because it is cheap and it
+settles what the partitions actually are. Whether it can carry the installer is a
+separate question, and the first boot will tell us: `linux-prep/init` tries to
+mount userdata read-only and reports what it finds.
