@@ -267,6 +267,15 @@
   MdeModulePkg/Universal/SmbiosDxe/SmbiosDxe.inf
 
   #
+  # Lists the block devices and their partition names on screen.
+  #
+  # The FDF alone is not enough: GenFfs resolves each INF through the DSC, and
+  # a module listed in the FDF but absent from the DSC fails the build with
+  # "NOT found in DSC file", which is what happened on the first attempt.
+  #
+  F11/Drivers/StorageReportDxe/StorageReportDxe.inf
+
+  #
   # Bds
   #
   MdeModulePkg/Universal/PrintDxe/PrintDxe.inf
