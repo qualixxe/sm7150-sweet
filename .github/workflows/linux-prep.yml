@@ -1,0 +1,114 @@
+name: Linux prep ramdisk
+
+# Builds a minimal arm64 rootfs so the phone can be booted into a kernel of our
+# own choosing, via `fastboot boot`, which writes nothing.
+#
+# This exists because the UEFI firmware cannot help with storage: it ships one
+# filesystem driver, Fat, and the phone's partitions are ext4 and f2fs. A
+# working UFS controller would still show nothing mountable. The phone's own
+# kernel has real drivers for this SoC, so the storage question is answered
+# there instead, with root, and nothing on flash is touched.
+#
+# The output is committed to the repository rather than uploaded as an artifact,
+# because downloading artifacts needs a token with the actions:read scope.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'linux-prep/**'
+      - 'tools/mk_initramfs.py'
+      - '.github/workflows/linux-prep.yml'
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  ramdisk:
+    name: arm64 initramfs
+    runs-on: ubuntu-22.04
+    timeout-minutes: 60
+    permissions:
+      contents: write
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install cross toolchain
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            gcc-aarch64-linux-gnu libc6-dev-arm64-cross cpio gzip
+
+      - name: Build busybox for arm64
+        run: |
+          set -euo pipefail
+          VER=1.36.1
+          curl -sSL -o busybox.tar.bz2 \
+            "https://busybox.net/downloads/busybox-$VER.tar.bz2"
+          tar xjf busybox.tar.bz2
+          cd "busybox-$VER"
+
+          # defconfig already covers sh, mount, ls, cat, dd, od, sleep, blkid,
+          # basename and head, which is everything linux-prep/init calls.
+          make defconfig
+
+          # Two applets the init script leans on are not in defconfig, and a
+          # static build is the whole point: there is no libc on this machine to
+          # fall back to.
+          sed -i 's/^# CONFIG_SFDISK is not set/CONFIG_SFDISK=y/' .config
+          sed -i 's/^# CONFIG_FDISK is not set/CONFIG_FDISK=y/' .config
+          sed -i 's/^# CONFIG_STATIC is not set/CONFIG_STATIC=y/' .config
+
+          # defconfig builds a "busybox" target only; ask for the applets too so
+          # the install step has something to symlink.
+          sed -i 's/^# CONFIG_INSTALL_APPLET is not set/CONFIG_INSTALL_APPLET=y/' .config
+
+          make CROSS_COMPILE=aarch64-linux-gnu- -j"$(nproc)"
+
+          file busybox
+          aarch64-linux-gnu-readelf -h busybox | head -20
+
+      - name: Assemble the rootfs
+        run: |
+          set -euo pipefail
+          ROOTFS="$RUNNER_TEMP/rootfs"
+          rm -rf "$ROOTFS"
+          mkdir -p "$ROOTFS"/{bin,proc,sys,dev,tmp,mnt}
+
+          install -m 0755 busybox-"$VER"/busybox "$ROOTFS/bin/busybox"
+
+          # Only one symlink is needed. linux-prep/init calls applets as
+          # "/bin/busybox <applet>" everywhere, so it does not depend on the
+          # applet links at all; /bin/sh exists purely for the #!/bin/sh line.
+          #
+          # The links are not generated here on purpose: busybox --install has
+          # to be executed to list applets, and that is an arm64 binary on an
+          # x86 runner.
+          ln -s busybox "$ROOTFS/bin/sh"
+
+          install -m 0755 linux-prep/init "$ROOTFS/init"
+
+          echo "=== rootfs ==="
+          ls -la "$ROOTFS" "$ROOTFS/bin"
+          du -sh "$ROOTFS"
+
+      - name: Pack and publish
+        run: |
+          set -euo pipefail
+          ROOTFS="$RUNNER_TEMP/rootfs"
+          mkdir -p dist
+          python3 tools/mk_initramfs.py "$ROOTFS" -o dist/linux-prep-rootfs.cpio.gz
+          gzip -t dist/linux-prep-rootfs.cpio.gz && echo "gzip integrity ok"
+          ls -l dist/linux-prep-rootfs.cpio.gz
+
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -f dist/linux-prep-rootfs.cpio.gz
+          git commit -m "Publish linux-prep ramdisk [skip ci]" || echo "unchanged"
+          git push origin "HEAD:${{ github.ref_name }}"
+
+      - name: Show what was published
+        run: ls -l dist/

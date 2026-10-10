@@ -39,6 +39,11 @@ OFF_RAMDISK_SIZE = 16
 OFF_PAGE_SIZE = 36
 OFF_HEADER_VERSION = 40
 
+# The stock header carries an Android command line here, 512 bytes, null padded.
+# BOOT_MAGIC_SIZE is 8, so this is at 64 and not at 60.
+OFF_CMDLINE = 64
+CMDLINE_SIZE = 512
+
 
 class BootImage:
     def __init__(self, blob):
@@ -96,7 +101,7 @@ class BootImage:
             )
         )
 
-    def with_ramdisk(self, ramdisk):
+    def with_ramdisk(self, ramdisk, cmdline_append=None):
         """Return a new image identical to this one but with a new ramdisk.
 
         The kernel, the device tree, the header addresses and the total file
@@ -107,6 +112,8 @@ class BootImage:
 
         header = bytearray(self.header)
         struct.pack_into("<I", header, OFF_RAMDISK_SIZE, len(ramdisk))
+        if cmdline_append:
+            self._append_cmdline(header, cmdline_append)
 
         out = bytearray()
         out += header
@@ -122,6 +129,25 @@ class BootImage:
         del out[self.file_size:]
         return bytes(out)
 
+    def cmdline(self):
+        raw = self.header[OFF_CMDLINE:OFF_CMDLINE + CMDLINE_SIZE]
+        return raw.split(b"\x00", 1)[0].decode("utf-8", "replace")
+
+    def _append_cmdline(self, header, extra):
+        """Add to the kernel command line, keeping every original argument.
+
+        console=tty0 matters: without it the kernel logs to the UART, which this
+        phone does not expose to us, so a ramdisk that boots would look identical
+        to one that hung.
+        """
+        current = self.cmdline()
+        new = (current + " " + extra).encode("utf-8")
+        if len(new) >= CMDLINE_SIZE:
+            raise SystemExit(
+                "command line would be %d bytes, the field holds %d"
+                % (len(new), CMDLINE_SIZE - 1))
+        header[OFF_CMDLINE:OFF_CMDLINE + CMDLINE_SIZE] = new + b"\x00" * (CMDLINE_SIZE - len(new))
+
 
 def main():
     ap = argparse.ArgumentParser(description=__doc__,
@@ -129,6 +155,8 @@ def main():
     ap.add_argument("source", help="stock Android boot.img for this phone")
     ap.add_argument("-r", "--ramdisk", help="replacement ramdisk (cpio.gz)")
     ap.add_argument("-o", "--out", help="output image (default: stdout summary only)")
+    ap.add_argument("--cmdline-append",
+                    help="extra kernel command line arguments, e.g. 'console=tty0'")
     ap.add_argument("--describe", action="store_true",
                     help="print the layout and exit")
     args = ap.parse_args()
@@ -138,6 +166,7 @@ def main():
 
     print("source: %s" % args.source)
     print(image.describe())
+    print("cmdline: %s" % image.cmdline())
 
     if args.describe:
         return 0
@@ -151,7 +180,7 @@ def main():
     if ramdisk[0:2] != b"\x1f\x8b":
         raise SystemExit("ramdisk is not gzip: starts %r" % ramdisk[0:2])
 
-    out = image.with_ramdisk(ramdisk)
+    out = image.with_ramdisk(ramdisk, args.cmdline_append)
     if not args.out:
         raise SystemExit("no --out given")
 

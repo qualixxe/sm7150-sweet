@@ -1,0 +1,226 @@
+#!/bin/sh
+# Runs as PID 1 from a ramdisk of our own, with the phone's stock kernel.
+#
+# Why this exists: the UEFI firmware can only mount FAT32, and this phone's
+# partitions are ext4 and f2fs. Even a perfectly working UFS controller would give
+# the File Manager nothing to show, so storage cannot be judged from there. This
+# boots the phone's own kernel instead and looks at the block devices directly,
+# which is where the answer actually is.
+#
+# It is loaded with `fastboot boot`, so nothing is written to flash. It prints to
+# the framebuffer console, one page at a time with pauses, because there is no
+# UART and a photograph is the only way to read the screen.
+#
+# Everything it does is read-only on purpose. No partition is written, no
+# filesystem is modified, and every mount is read-only, so a mistake here cannot
+# cost the user anything.
+
+PATH=/bin:/sbin:/usr/bin:/usr/sbin
+export PATH
+
+/bin/busybox mkdir -p /proc /sys /dev /tmp /mnt
+/bin/busybox mount -t proc     proc     /proc
+/bin/busybox mount -t sysfs    sysfs    /sys
+/bin/busybox mount -t devtmpfs devtmpfs /dev 2>/dev/null
+
+# ---------------------------------------------------------------- page helper
+
+PAGE=1
+
+say() {
+    /bin/busybox echo "$*"
+}
+
+# Print a heading that survives being photographed at 640x400.
+head1() {
+    say ""
+    say "========================================"
+    say "$*"
+    say "========================================"
+}
+
+# A blank run of seconds is unreadable, so pages are separated by a visible
+# marker and a long pause.
+pause() {
+    say ""
+    say "--- page $PAGE ends, next in 20s ---"
+    /bin/busybox sleep 20
+    say ""
+    say "########################################"
+    say "#########  PAGE $((PAGE + 1))  #########"
+    say "########################################"
+    PAGE=$((PAGE + 1))
+}
+
+# ---------------------------------------------------------------------- page 1
+
+say "########################################"
+say "########   COURBET LINUX PREP v1   #####"
+say "########################################"
+say ""
+say "this is the phone's own kernel with our"
+say "ramdisk. nothing has been written."
+say ""
+say "cmdline:"
+/bin/busybox cat /proc/cmdline
+say ""
+say "kernel:"
+/bin/busybox uname -a
+
+pause
+
+# ---------------------------------------------------------------------- page 2
+
+head1 "BLOCK DEVICES"
+
+if [ -d /sys/class/block ]; then
+    for d in /sys/class/block/*; do
+        [ -e "$d" ] || continue
+        name=/bin/busybox basename "$d"
+        # The device mapper and loop devices are noise here.
+        case "$name" in
+            dm-*|loop*|ram*|zram*|md*|nbd*) continue ;;
+        esac
+        sectors=/bin/busybox cat "$d/size" 2>/dev/null
+        [ -n "$sectors" ] || continue
+        mb=$((sectors / 2048))
+        dev=/dev/block/$name
+        [ -e "$dev" ] || dev=""
+        say ""
+        say "$name   ${mb} MB   $dev"
+        if [ -n "$dev" ]; then
+            ro=$(/bin/busybox blkid "$dev" 2>/dev/null)
+            [ -n "$ro" ] && say "   type: $ro"
+        fi
+    done
+else
+    say "/sys/class/block is missing - the kernel did not"
+    say "register any block device."
+fi
+
+pause
+
+# ---------------------------------------------------------------------- page 3
+
+head1 "PARTITION TABLE"
+
+# Read the MBR partition entries directly rather than trusting a tool: the
+# offsets are fixed and this cannot go wrong if the disk is absent.
+UFS=/dev/block/sda
+[ -e "$UFS" ] || UFS=/dev/block/mmcblk0
+[ -e "$UFS" ] || UFS=/dev/block/sdb
+
+say ""
+if [ ! -e "$UFS" ]; then
+    say "no candidate block device found"
+else
+    say "reading $UFS"
+    say ""
+    say "MBR signature word at 0x1b8:"
+    /bin/busybox od -An -tx1 -j 440 -N 2 "$UFS" 2>/dev/null
+
+    /bin/busybox dd if="$UFS" bs=1 skip=446 count=64 2>/dev/null > /tmp/mbr
+    if [ -s /tmp/mbr ]; then
+        say ""
+        say "MBR partition entries, 4 x 16 bytes at 0x1be:"
+        n=1
+        while [ $n -le 4 ]; do
+            off=$(( (n - 1) * 16 ))
+            /bin/busybox dd if=/tmp/mbr bs=1 skip=$off count=16 2>/dev/null | \
+                /bin/busybox od -An -tx1
+            n=$((n + 1))
+        done
+    fi
+fi
+
+pause
+
+# ---------------------------------------------------------------------- page 4
+
+head1 "GPT"
+
+if [ -e "$UFS" ]; then
+    /bin/busybox dd if="$UFS" bs=1 skip=512 count=512 2>/dev/null > /tmp/gpthdr
+    if [ -s /tmp/gpthdr ]; then
+        say ""
+        say "primary GPT header signature (expect 'EFI PART'):"
+        /bin/busybox dd if=/tmp/gpthdr bs=1 skip=0 count=8 2>/dev/null | \
+            /bin/busybox od -An -c
+        say ""
+        say "first 8 partition entries (128 bytes each):"
+        /bin/busybox dd if="$UFS" bs=1 skip=$((512 + 92)) count=1024 2>/dev/null | \
+            /bin/busybox od -An -tx1 | /bin/busybox head -40
+    fi
+else
+    say "no block device"
+fi
+
+pause
+
+# ---------------------------------------------------------------------- page 5
+
+head1 "WHERE THE WINDOWS FILES WOULD BE"
+
+# If the installer has been pushed to /sdcard it lives on userdata, which is
+# ext4. Mounting it read-only is safe: no journal is replayed and nothing is
+# written, so this cannot damage the partition.
+say ""
+say "looking for userdata..."
+
+UD=""
+for cand in userdata userdata_a userdata_b; do
+    [ -e "/dev/block/by-name/$cand" ] && { UD="/dev/block/by-name/$cand"; break; }
+done
+
+if [ -z "$UD" ]; then
+    say "no /dev/block/by-name/userdata"
+else
+    say "userdata is $UD"
+    if /bin/busybox mount -t ext4 -o ro "$UD" /mnt 2>/dev/null; then
+        say "mounted read-only"
+        say ""
+        say "top level:"
+        /bin/busybox ls /mnt | /bin/busybox head -30
+        say ""
+        if [ -d /mnt/sdcard ]; then
+            say "contents of /sdcard:"
+            /bin/busybox ls /mnt/sdcard | /bin/busybox head -40
+            say ""
+            if [ -d /mnt/sdcard/Win ]; then
+                say "Windows installer files found:"
+                /bin/busybox ls -l /mnt/sdcard/Win | /bin/busybox head -40
+            else
+                say "no /sdcard/Win directory yet"
+            fi
+        else
+            say "no /sdcard directory in this partition"
+        fi
+        /bin/busybox umount /mnt 2>/dev/null
+    else
+        say "could not mount $UD read-only"
+    fi
+fi
+
+pause
+
+# ---------------------------------------------------------------------- page 6
+
+head1 "SUMMARY"
+
+say ""
+say "This run changed nothing on the phone."
+say ""
+say "To end: hold power until it turns off,"
+say "then hold power + volume down for fastboot."
+
+say ""
+say "########################################"
+say "#########    END OF REPORT     ######"
+say "########################################"
+
+# Stay alive so the pages can be photographed. Rebooting on our own would drop
+# the user straight back into fastboot with no warning, which is not a thing to
+# do to someone's phone.
+while true; do
+    /bin/busybox sleep 60
+done
