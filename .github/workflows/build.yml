@@ -20,6 +20,8 @@ jobs:
     # which newer runners no longer ship.
     runs-on: ubuntu-22.04
     timeout-minutes: 180
+    permissions:
+      contents: write
 
     steps:
       - uses: actions/checkout@v4
@@ -59,6 +61,33 @@ jobs:
             echo "=== $img ==="
             python3 tools/verify_boot_image.py "$img"
           done
+
+      - name: Publish images into the repository
+        # Downloading a workflow artifact needs a token carrying the actions:read
+        # scope, and the only credential available here does not have it - the
+        # artifact is listed through the API but its zip endpoint answers 404.
+        #
+        # Committing the images sidesteps that: `git pull` fetches them with no
+        # authorisation at all, over the same transport that already works for
+        # pushing. Only the unpadded images are committed; the 128 MB copies are
+        # regenerable with tools/pad_to_partition.py.
+        run: |
+          set -euo pipefail
+          mkdir -p dist
+          rm -f dist/*.img
+          for img in out/*.img; do
+            case "$img" in *-128m.img) continue ;; esac
+            cp "$img" "dist/$(basename "$img")"
+          done
+          python3 tools/verify_boot_image.py dist/courbet-with-courbet-dtb.img >/dev/null
+          ls -l dist/
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -f dist
+          # [skip ci] stops this commit from starting another build, which would
+          # otherwise commit its own output and never settle.
+          git commit -m "Publish built images [skip ci]" || echo "images unchanged"
+          git push origin "HEAD:${{ github.ref_name }}"
 
       - name: Upload
         uses: actions/upload-artifact@v4
