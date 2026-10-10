@@ -142,3 +142,46 @@ that it did anything useful.
 
 The three left on sm7150 are blocked by protocols that exist nowhere in the driver
 repository, as recorded above.
+## The File Manager was the wrong instrument
+
+Worth recording before the next attempt, because it changes what counts as
+evidence.
+
+The image carries exactly one filesystem driver. From the module list:
+
+    DiskIoDxe     36916 B
+    PartitionDxe  41018 B
+    Fat           57384 B
+    UFSDxe       127062 B
+
+`Fat` is the only one. UEFI can mount FAT32 and nothing else. The partitions on
+this phone are ext4 and f2fs, so a working UFS controller would still not produce
+a mountable volume, and the File Manager would still list only LOGFS, bluetooth
+and VenHw.
+
+So "no userdata in the File Manager" is expected whether or not storage works.
+It has been treated as proof that storage is broken, and on that basis
+UFSDxe was replaced, PmicDxe was evaluated, and the missing protocols were chased
+across 396 binaries. None of that was established by the File Manager.
+
+### What to use instead
+
+The image contains a UEFI Shell, 1 081 416 bytes, as an application. Its command
+table was checked and it carries the block-device commands:
+
+    dblk  dh  map  devices  drivers  blk
+
+These read raw BlockIo handles and need no filesystem at all. In the app menu,
+open UEFI Shell and run:
+
+    map -r
+    devices
+    dblk -d 0
+    dh -d 0
+
+A device reporting roughly 112 GB means the UFS controller enumerated and the
+storage chain is fine, and the whole missing-userdata line was a measurement
+error. Nothing listed beyond the built-in firmware volume means storage really is
+down, and the driver work stands.
+
+This costs nothing: it is the same image already flashed with `fastboot boot`.
