@@ -87,6 +87,10 @@ jobs:
           # [skip ci] stops this commit from starting another build, which would
           # otherwise commit its own output and never settle.
           git commit -m "Publish built images [skip ci]" || echo "images unchanged"
+          # The ramdisk workflow pushes to the same branch and can land first,
+          # which makes a plain push a non-fast-forward. Rebasing onto the remote
+          # keeps both sets of files: they are different names under dist/.
+          git pull --rebase --autostash origin "${{ github.ref_name }}"
           git push origin "HEAD:${{ github.ref_name }}"
 
       - name: Upload

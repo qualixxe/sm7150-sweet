@@ -112,6 +112,8 @@ jobs:
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add -f dist/linux-prep-rootfs.cpio.gz
           git commit -m "Publish linux-prep ramdisk [skip ci]" || echo "unchanged"
+          # The firmware workflow pushes to the same branch and can land first.
+          git pull --rebase --autostash origin "${{ github.ref_name }}"
           git push origin "HEAD:${{ github.ref_name }}"
 
       - name: Show what was published
