@@ -18,14 +18,17 @@ FILE DRIVER = cd823a4d-7dec-4531-ae5d-4134fa4127b8 {
 }
 
 FILE DRIVER = 11faed4c-b21f-4d88-8e48-c4c28a1e50df {
-    SECTION DXE_DEPEX = Dxe/EFI_Binaries/Drivers/sm7150/UsbPwrCtrlDxe/UsbPwrCtrlDxe.depex
-    SECTION PE32 = Dxe/EFI_Binaries/Drivers/sm7150/UsbPwrCtrlDxe/UsbPwrCtrlDxe.efi
+    SECTION DXE_DEPEX = Dxe/EFI_Binaries/Drivers/sm7325/UsbPwrCtrlDxe/UsbPwrCtrlDxe.depex
+    SECTION PE32 = Dxe/EFI_Binaries/Drivers/sm7325/UsbPwrCtrlDxe/UsbPwrCtrlDxe.efi
     SECTION UI = "UsbPwrCtrlDxe"
 }
 
+# UsbfnDwc3Dxe: sm7325, not sm7150. Both have sixteen depex protocols and all
+# are present, so this one dispatches either way - but sm7150 would program
+# register offsets belonging to a different SoC.
 FILE DRIVER = 94f8a6a7-dc34-4101-88c1-99179cceae83 {
-    SECTION DXE_DEPEX = Dxe/EFI_Binaries/Drivers/sm7150/UsbfnDwc3Dxe/UsbfnDwc3Dxe.depex
-    SECTION PE32 = Dxe/EFI_Binaries/Drivers/sm7150/UsbfnDwc3Dxe/UsbfnDwc3Dxe.efi
+    SECTION DXE_DEPEX = Dxe/EFI_Binaries/Drivers/sm7325/UsbfnDwc3Dxe/UsbfnDwc3Dxe.depex
+    SECTION PE32 = Dxe/EFI_Binaries/Drivers/sm7325/UsbfnDwc3Dxe/UsbfnDwc3Dxe.efi
     SECTION UI = "UsbfnDwc3Dxe"
 }
 

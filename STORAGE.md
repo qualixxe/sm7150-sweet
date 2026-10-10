@@ -100,3 +100,45 @@ driver repository in the first place. Continuing down this route means finding
 the DAL/Glink/RPMh stack from Qualcomm's own source and building it, which is a
 much larger job than swapping binaries, and it is recorded here rather than
 half-finished.
+## Two results while looking for the storage blocker
+
+### The device tree is already the right one
+
+The stock courbet Android boot image contains exactly one flattened device tree,
+at offset 0x01059000, 398 043 bytes. The one carried by our UEFI image is the
+same length and byte-for-byte identical (sha256 1a9a51c6...).
+
+That tree says `model = Qualcomm Technologies, Inc. SDMMAGPIE SoC` and
+`compatible = qcom,sdmmagpie`, which is an SM8150 name on an SM7325 phone. It
+looked like a substituted tree. It is not - it is Xiaomi's own, shipped in
+Xiaomi's own image, so the name is what the vendor chose and not evidence of the
+wrong platform. The device tree line of investigation is closed.
+
+It does carry one thing worth recording: `/soc/ufshc@1d84000` and
+`/soc/ufsphy_mem@1d87000` are both `status = disabled`. That would explain a
+missing disk in any driver that parses the tree. It does not explain ours,
+because sm7325/UFSDxe, sm7325/PmicDxe and sm7325/ClockDxe contain no device
+tree strings at all - no `ufshc`, no `reg-names`, no `okay`, no `disabled`. They
+use hardcoded addresses. So no DTB edit was made; it would have had no effect.
+
+### ClockDxe was programming the wrong SoC
+
+Checking every active driver against its sm7325 counterpart, and accepting a
+switch only where the sm7325 depex is already satisfied by the current build:
+
+    ClockDxe         2 deps OK  ->  3 deps OK          switched
+    SmemDxe          0 deps OK  ->  1 dep  OK          switched
+    SPMI             0 deps OK  ->  1 dep  OK          switched
+    UsbfnDwc3Dxe    16 deps OK  ->  16 deps OK         switched
+    UsbPwrCtrlDxe    0 deps OK  ->  0 deps OK          switched
+    HWIODxeDriver    1 dep  OK  ->  2 deps, blocked    left
+    PmicDxe          2 deps OK  ->  3 deps, blocked    left
+    UsbConfigDxe     5 deps OK  ->  4 deps, blocked    left
+
+ClockDxe is the one that matters. It is what enables the UFS core, bus aggregate
+and interface clocks, and the sm7150 build was turning on bits at offsets
+belonging to a different SoC. That it dispatched without crashing is not evidence
+that it did anything useful.
+
+The three left on sm7150 are blocked by protocols that exist nowhere in the driver
+repository, as recorded above.

@@ -6,9 +6,12 @@
 # ============================================================================
 
 # --- SmemDxe (ATIVO) ---
+# sm7325, not sm7150. Its one depex protocol is already present in the image,
+# so it dispatches. sm7150/SmemDxe had an empty depex and dispatched against
+# register offsets belonging to a different SoC.
   FILE DRIVER = f541d663-4a48-40aa-aabf-ff158ccae34c {
-    SECTION DXE_DEPEX = Dxe/EFI_Binaries/Drivers/sm7150/SmemDxe/SmemDxe.depex
-    SECTION PE32 = Dxe/EFI_Binaries/Drivers/sm7150/SmemDxe/SmemDxe.efi
+    SECTION DXE_DEPEX = Dxe/EFI_Binaries/Drivers/sm7325/SmemDxe/SmemDxe.depex
+    SECTION PE32 = Dxe/EFI_Binaries/Drivers/sm7325/SmemDxe/SmemDxe.efi
     SECTION UI = "SmemDxe"
   }
 
@@ -27,9 +30,17 @@
 #  }
 
 # --- ClockDxe (ATIVO, base) ---
+# sm7325, not sm7150.
+#
+# This is the one that most likely matters for storage. ClockDxe is what turns on
+# the UFS core, bus aggregate and interface clocks, and the sm7150 build programs
+# offsets belonging to a different SoC - so it ran, and turned on the wrong bits.
+#
+# sm7325/ClockDxe has three depex protocols instead of two, and all three are
+# already present in the image, so it dispatches.
   FILE DRIVER = 4DB5DEA6-5302-4D1A-8A82-677A683B0D29 {
-    SECTION DXE_DEPEX = Dxe/EFI_Binaries/Drivers/sm7150/ClockDxe/ClockDxe.depex
-    SECTION PE32 = Dxe/EFI_Binaries/Drivers/sm7150/ClockDxe/ClockDxe.efi
+    SECTION DXE_DEPEX = Dxe/EFI_Binaries/Drivers/sm7325/ClockDxe/ClockDxe.depex
+    SECTION PE32 = Dxe/EFI_Binaries/Drivers/sm7325/ClockDxe/ClockDxe.efi
     SECTION UI = "ClockDxe"
   }
 
@@ -53,9 +64,12 @@
   }
 
 # --- SPMI (ATIVO, base) ---
+# sm7325, not sm7150. One depex protocol, already present. SPMI is the bus the
+# PMIC sits on, so getting it onto the right build matters for anything that
+# touches power rails.
   FILE DRIVER = 2a7b4bef-80cd-49e1-b473-374ba4d673fc {
-    SECTION DXE_DEPEX = Dxe/EFI_Binaries/Drivers/sm7150/SPMI/SPMI.depex
-    SECTION PE32 = Dxe/EFI_Binaries/Drivers/sm7150/SPMI/SPMI.efi
+    SECTION DXE_DEPEX = Dxe/EFI_Binaries/Drivers/sm7325/SPMI/SPMI.depex
+    SECTION PE32 = Dxe/EFI_Binaries/Drivers/sm7325/SPMI/SPMI.efi
     SECTION UI = "SPMI"
   }
 
