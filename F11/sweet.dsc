@@ -174,6 +174,13 @@
   ArmPlatformPkg/PrePi/PeiUniCore.inf
 
   #
+  # Lists the block devices and their partition names on screen, without needing
+  # a keyboard. sweetbuild.sh builds against this DSC, not F11.dsc, so listing
+  # the module only in the other one leaves it invisible here.
+  #
+  F11/Drivers/StorageReportDxe/StorageReportDxe.inf
+
+  #
   # DXE
   #
   MdeModulePkg/Core/Dxe/DxeMain.inf {
