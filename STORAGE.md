@@ -44,3 +44,59 @@ change.
 
 Booting Linux from RAM via the Boot Linux app does not need storage and works
 today. Windows does, so it stays blocked until the above is solved.
+## Follow-up: the missing protocols are not power protocols
+
+Picking the storage investigation further produced a correction to the earlier
+conclusion.
+
+The two protocols that block `sm7325/PmicDxe` and `RpmhDxe`:
+
+    F0F602A3-13A3-264A-F03E-F2E0DEC51234
+    6B02342F-5F30-7DFA-F4C4-4AA47D882F82
+
+are absent from all 396 binaries in dopaemon/edk2-msm-binary, in both GUID byte
+orders, and are not declared in qualcomm-linux/edk2-platforms either. So they
+cannot be satisfied by swapping in a different file from that repository.
+
+They are not, however, specific to this build. The depex survey across the
+repository shows a family sharing the tail `-13A3-264A-F03E-F2E0DEC51234`:
+
+    F0F60281  required by Devices/sweet and sm8150/WP_Binaries
+    F0F6023B  required by ScmDxe, ButtonsDxe, TzDxe on sm7125/sm7325/sm8150/sm8350
+    F0F602F1  required by UsbConfigDxe on sm7150/sm8150
+    F0F602A3  required by 20 files, including PmicDxe, DALTLMM, HWIODxeDriver
+
+These are per-subsystem protocols, not interchangeable, and nothing in the
+repository exports any of them.
+
+### The working firmware as the oracle
+
+The surya image that boots on this phone was used as a reference, since it is
+known to reach the point where its own drivers dispatch. It contains three
+members of that family which our build does not:
+
+    F0F60281  x3
+    F0F6023B  x1
+    F0F602F1  x1
+
+The one at F0F6023B lives inside a single 18 180-byte FFS file,
+`6442BCC0-BFDF-43FA-9564-7E8389AF7B5B`, which is `SecureBootProvisioningDxe` -
+a Secure Boot module, not power management. Our build does not contain it.
+
+That file exports nothing any driver in this ecosystem declares a dependency on,
+so it is infrastructure the working firmware happens to carry, not the answer.
+
+### What this rules out
+
+`PmicDxe` is not present in the working firmware at all, under its FDF GUID
+`5776232E-082D-4B75-9A0E-FE1D13F7A5D9`. The working firmware therefore does not
+take the same path to storage that the sm7xxx driver set implies, and its
+storage behaviour cannot be copied file for file. It reaches DXE and a GUI; it
+has never been shown to expose userdata either.
+
+So the earlier framing - "sm7325 is the right variant but two protocols are
+missing" - is only half right. Those two protocols are unreachable from this
+driver repository in the first place. Continuing down this route means finding
+the DAL/Glink/RPMh stack from Qualcomm's own source and building it, which is a
+much larger job than swapping binaries, and it is recorded here rather than
+half-finished.
