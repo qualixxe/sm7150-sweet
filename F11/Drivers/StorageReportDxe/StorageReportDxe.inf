@@ -30,11 +30,11 @@
   UefiLib
   BaseLib
   BaseMemoryLib
+  MemoryAllocationLib
   PrintLib
 
 [Protocols]
   gEfiBlockIoProtocolGuid              ## CONSUMES
-  gEfiPartitionInfoProtocolGuid        ## CONSUMES
 
 #
 # Nothing is required for it to run: a report is useful precisely when the
