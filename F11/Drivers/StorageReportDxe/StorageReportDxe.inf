@@ -1,0 +1,46 @@
+#/** @file
+#
+#  Storage Report - an application that prints the block devices and their
+#  partition names without needing any input.
+#
+#  It exists because the UEFI Shell has the right commands but the phone has no
+#  keyboard, so nothing can be typed into it. Launched from the menu with the
+#  mouse, this prints the same information and returns by itself.
+#
+#**/
+
+[Defines]
+  INF_VERSION                    = 0x00010005
+  BASE_NAME                      = StorageReportDxe
+  FILE_GUID                      = 3f2a71c4-58d0-4b19-9e6a-0c2f5b8d71a3
+  MODULE_TYPE                    = UEFI_APPLICATION
+  VERSION_STRING                 = 1.0
+  ENTRY_POINT                    = UefiApplicationEntryPoint
+
+[Sources]
+  StorageReportDxe.c
+
+[Packages]
+  MdePkg/MdePkg.dec
+  MdeModulePkg/MdeModulePkg.dec
+
+[LibraryClasses]
+  UefiApplicationEntryPoint
+  UefiBootServicesTableLib
+  UefiLib
+  BaseLib
+  BaseMemoryLib
+  PrintLib
+
+[Protocols]
+  gEfiBlockIoProtocolGuid              ## CONSUMES
+  gEfiPartitionInfoProtocolGuid        ## CONSUMES
+
+#
+# Nothing is required for it to run: a report is useful precisely when the
+# machine is in a bad state, so it must not depend on the very things it is
+# reporting on. It is an application, not a driver, so it is dispatched by the
+# user from the menu rather than by the dispatcher at all.
+#
+[Depex]
+  TRUE

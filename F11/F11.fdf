@@ -234,6 +234,13 @@ READ_LOCK_STATUS   = TRUE
   INF ShellPkg/DynamicCommand/TftpDynamicCommand/TftpDynamicCommand.inf
 !endif #$(INCLUDE_TFTP_COMMAND)
 
+  #
+  # Lists every BlockIo device and its partitions by name, on the screen, with
+  # no keyboard involved. The Shell has the same information but there is no
+  # way to type a command into it on this phone, so it answers nothing here.
+  #
+  INF F11/Drivers/StorageReportDxe/StorageReportDxe.inf
+
 
 #INF F11/Drivers/LogoDxe/LogoDxe.inf
   #
