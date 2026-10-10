@@ -82,6 +82,50 @@
     SECTION UI = "UFSDxe"
   }
 
+# --- Модули, которых нет в нашей сборке, но есть в рабочей -------------
+#   Пересобраны: тот же набор, что грузится на courbet - 157 модулей против
+#   наших 57. Из них добавлены только те, чей DEPEX текущая сборка уже
+#   удовлетворяет, чтобы ничего не сломать:
+#
+#     DDRInfoDxe       1 зависимость, есть
+#     HALIOMMU        13 зависимостей, все есть
+#     NpaDxe           1 зависимость, есть
+#     ShmBridgeDxeLA   без DEPEX
+#
+#   Не добавлены, потому что заблокированы отсутствующими протоколами:
+#     ChipInfo, DALTLMM, PlatformInfoDxeDriver  - нужен F0F602A3
+#     DALSys                                    - нужен F0F60238
+#
+#   FFS GUID взяты из рабочей прошивки, а не выдуманы.
+
+  # --- DDRInfoDxe ---
+  FILE DRIVER = 7db0793a-4402-4be1-906e-d0fabad2707e {
+    SECTION DXE_DEPEX = Dxe/EFI_Binaries/Drivers/sm7325/DDRInfoDxe/DDRInfoDxe.depex
+    SECTION PE32 = Dxe/EFI_Binaries/Drivers/sm7325/DDRInfoDxe/DDRInfoDxe.efi
+    SECTION UI = "DDRInfoDxe"
+  }
+
+  # --- HALIOMMU ---
+  FILE DRIVER = 9a00771f-36d4-4dd5-8916-c48ed9b16b86 {
+    SECTION DXE_DEPEX = Dxe/EFI_Binaries/Drivers/sm7325/HALIOMMU/HALIOMMU.depex
+    SECTION PE32 = Dxe/EFI_Binaries/Drivers/sm7325/HALIOMMU/HALIOMMU.efi
+    SECTION UI = "HALIOMMU"
+  }
+
+  # --- NpaDxe : управление питанием, ближе всего к цели ---
+  FILE DRIVER = cb29f4d1-7f37-4692-a416-93e82e219711 {
+    SECTION DXE_DEPEX = Dxe/EFI_Binaries/Drivers/sm7325/NpaDxe/NpaDxe.depex
+    SECTION PE32 = Dxe/EFI_Binaries/Drivers/sm7325/NpaDxe/NpaDxe.efi
+    SECTION UI = "NpaDxe"
+  }
+
+  # --- ShmBridgeDxeLA ---
+  FILE DRIVER = 9c1eb71f-dd6c-4ed5-9f6a-5cc0ca789f16 {
+    SECTION DXE_DEPEX = Dxe/EFI_Binaries/Drivers/sm7325/ShmBridgeDxeLA/ShmBridgeDxeLA.depex
+    SECTION PE32 = Dxe/EFI_Binaries/Drivers/sm7325/ShmBridgeDxeLA/ShmBridgeDxeLA.efi
+    SECTION UI = "ShmBridgeDxe"
+  }
+
 # ===== BACKEND COMENTADO - descomentar UM por vez =====
 
 # --- [2] ChipInfo ---
