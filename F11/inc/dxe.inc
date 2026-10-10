@@ -34,6 +34,18 @@
   }
 
 # --- PmicDxe (ATIVO, base) ---
+  # Left on sm7150 deliberately.
+  #
+  # sm7325/PmicDxe is the SoC-matched build and looks like the right choice, but
+  # it needs two protocols that nothing can supply:
+  #
+  #   F0F602A3-13A3-264A-F03E-F2E0DEC51234
+  #   6B02342F-5F30-7DFA-F4C4-4AA47D882F82
+  #
+  # Both were searched across all 33 sm7325 drivers in the binary repository, in
+  # both GUID byte orders, and neither appears in any of them. So switching would
+  # trade a driver that dispatches for one that never does. The provider is not
+  # in this driver set, so sm7150/PmicDxe stays until it is.
   FILE DRIVER = 5776232e-082d-4b75-9a0e-fe1d13f7a5d9 {
     SECTION DXE_DEPEX = Dxe/EFI_Binaries/Drivers/sm7150/PmicDxe/PmicDxe.depex
     SECTION PE32 = Dxe/EFI_Binaries/Drivers/sm7150/PmicDxe/PmicDxe.efi
