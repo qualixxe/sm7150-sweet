@@ -34,6 +34,7 @@
 #include <Uefi.h>
 #include <Library/UefiLib.h>
 #include <Library/UefiBootServicesTableLib.h>
+#include <Library/MemoryAllocationLib.h>
 #include <Protocol/BlockIo.h>
 
 #define PROGRESS_SECONDS 6
@@ -51,8 +52,14 @@ typedef struct {
   CHAR16    *PartitionName;
 } EFI_PARTITION_INFO_PROTOCOL;
 
-#define EFI_PARTITION_INFO_PROTOCOL_GUID \
-  { 0x8cf2f62c, 0xbc9b, 0x4821, { 0x9d, 0x14, 0x98, 0x9a, 0x78, 0xbe, 0x2e, 0xc5 } }
+//
+// The GUID variable has to exist as well as the macro. Declaring only the macro
+// leaves every use of it undefined, which is exactly what happened on the first
+// attempt. Named without the usual gEfi prefix so it cannot clash if a header
+// that does define it ever appears.
+//
+EFI_GUID  gStorageReportPartitionInfoGuid =
+  { 0x8cf2f62c, 0xbc9b, 0x4821, { 0x9d, 0x14, 0x98, 0x9a, 0x78, 0xbe, 0x2e, 0xc5 } };
 
 /**
   Print one block device and, if it has any, its partitions.
@@ -69,7 +76,6 @@ PrintBlockDevice (
   )
 {
   EFI_BLOCK_IO_PROTOCOL        *BlockIo;
-  EFI_PARTITION_INFO_PROTOCOL  *PartitionInfo;
   EFI_HANDLE                  *PartHandles;
   UINTN                       NoParts;
   EFI_STATUS                  Status;
@@ -104,7 +110,7 @@ PrintBlockDevice (
   NoParts     = 0;
   Status      = gBS->LocateHandleBuffer (
                          ByProtocol,
-                         &gEfiPartitionInfoProtocolGuid,
+                         &gStorageReportPartitionInfoGuid,
                          (VOID *)Handle,
                          &NoParts,
                          &PartHandles
@@ -119,7 +125,7 @@ PrintBlockDevice (
 
     Status = gBS->HandleProtocol (
                      PartHandles[PartIndex],
-                     &gEfiPartitionInfoProtocolGuid,
+                     &gStorageReportPartitionInfoGuid,
                      (VOID **)&ThisPart
                      );
     if (EFI_ERROR (Status) || (ThisPart == NULL)) {
@@ -146,7 +152,10 @@ PrintBlockDevice (
 /**
   Entry point. Waits for the drivers to settle, then prints everything.
 
-  @param[in] ImageHandle  Image handle of this application.
+  @param[in] ImageHandle  Image handle of this application. Typed EFI_HANDLE
+                          rather than EFI_IMAGE_HANDLE because the latter is no
+                          longer declared by Uefi.h in this edk2 revision and
+                          the build rejects it as an unknown type.
   @param[in] SystemTable  System table.
 
   @retval EFI_SUCCESS  Always. This is a report, there is nothing to fail at.
@@ -154,7 +163,7 @@ PrintBlockDevice (
 EFI_STATUS
 EFIAPI
 UefiApplicationEntryPoint (
-  IN EFI_IMAGE_HANDLE  ImageHandle,
+  IN EFI_HANDLE        ImageHandle,
   IN EFI_SYSTEM_TABLE  *SystemTable
   )
 {
